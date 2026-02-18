@@ -1,0 +1,80 @@
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+.sidebar {
+  width: 240px;
+  background: #0f172a;
+  color: white;
+  padding: 20px;
+}
+
+.sidebar h2 {
+  margin-bottom: 30px;
+}
+
+.sidebar button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #1e293b;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.sidebar button:hover {
+  background: #334155;
+}
+
+.main-content {
+  flex: 1;
+  padding: 30px;
+  background: #f1f5f9;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-top: 20px;
+  box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 12px;
+}
+
+th {
+  background: #e2e8f0;
+}
+
+.status {
+  padding: 5px 10px;
+  border-radius: 10px;
+  color: white;
+}
+
+.pending {
+  background: orange;
+}
+
+.inprogress {
+  background: blue;
+}
+
+.resolved {
+  background: green;
+}
+
+select {
+  padding: 5px;
+}
