@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../services/authService";
+import { login } from "../services/supabaseService";
 import "./login.css";
 
 function Login() {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { logout, getRole } from "../services/authService";
+import { logout, getRole, getAllIssues, updateIssueStatus, assignTechnician, getIssueImages } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
 import "./admin.css";
 
@@ -8,6 +8,9 @@ function AdminDashboard() {
   const navigate = useNavigate();
 
   const [issues, setIssues] = useState([]);
+  const [issueImages, setIssueImages] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const technicians = [
     "Not Assigned",
@@ -28,44 +31,38 @@ function AdminDashboard() {
 
   }, []);
 
-  const loadIssues = () => {
+  const loadIssues = async () => {
 
-    const storedIssues =
-      JSON.parse(localStorage.getItem("studentIssues")) || [];
+    setLoading(true);
+    const fetchedIssues = await getAllIssues();
+    setIssues(fetchedIssues);
 
-    setIssues(storedIssues);
+    // Load images for each issue
+    for (const issue of fetchedIssues) {
+      const images = await getIssueImages(issue.id);
+      setIssueImages(prev => ({
+        ...prev,
+        [issue.id]: images
+      }));
+    }
+
+    setLoading(false);
   };
 
-  const updateStatus = (id, newStatus) => {
+  const updateStatus = async (id, newStatus) => {
 
-    const updated = issues.map(issue =>
-      issue.id === id
-        ? { ...issue, status: newStatus }
-        : issue
-    );
-
-    saveIssues(updated);
+    setLoading(true);
+    await updateIssueStatus(id, newStatus);
+    await loadIssues();
+    setLoading(false);
   };
 
-  const assignTechnician = (id, tech) => {
+  const handleAssignTechnician = async (id, tech) => {
 
-    const updated = issues.map(issue =>
-      issue.id === id
-        ? { ...issue, technician: tech }
-        : issue
-    );
-
-    saveIssues(updated);
-  };
-
-  const saveIssues = (updatedIssues) => {
-
-    setIssues(updatedIssues);
-
-    localStorage.setItem(
-      "studentIssues",
-      JSON.stringify(updatedIssues)
-    );
+    setLoading(true);
+    await assignTechnician(id, tech);
+    await loadIssues();
+    setLoading(false);
   };
 
   const getStatusClass = (status) => {
@@ -104,104 +101,147 @@ function AdminDashboard() {
 
           <h3>All Issues</h3>
 
-          <table>
+          {loading ? (
+            <p>Loading issues...</p>
+          ) : issues.length === 0 ? (
+            <p>No issues reported yet.</p>
+          ) : (
+            <table>
 
-            <thead>
+              <thead>
 
-              <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Location</th>
-                <th>Status</th>
-                <th>Technician</th>
-                <th>Assign Technician</th>
-                <th>Change Status</th>
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {issues.map(issue => (
-
-                <tr key={issue.id}>
-
-                  <td>{issue.id}</td>
-
-                  <td>{issue.title}</td>
-
-                  <td>{issue.category}</td>
-
-                  <td>{issue.location}</td>
-
-                  <td>
-                    <span className={
-                      getStatusClass(issue.status)
-                    }>
-                      {issue.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    {issue.technician}
-                  </td>
-
-                  <td>
-
-                    <select
-                      value={issue.technician}
-                      onChange={(e) =>
-                        assignTechnician(
-                          issue.id,
-                          e.target.value
-                        )
-                      }
-                    >
-
-                      {technicians.map((tech, index) => (
-
-                        <option key={index}>
-                          {tech}
-                        </option>
-
-                      ))}
-
-                    </select>
-
-                  </td>
-
-                  <td>
-
-                    <select
-                      value={issue.status}
-                      onChange={(e) =>
-                        updateStatus(
-                          issue.id,
-                          e.target.value
-                        )
-                      }
-                    >
-
-                      <option>Pending</option>
-                      <option>In Progress</option>
-                      <option>Resolved</option>
-
-                    </select>
-
-                  </td>
-
+                <tr>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Technician</th>
+                  <th>Student Email</th>
+                  <th>Images</th>
+                  <th>Assign Technician</th>
+                  <th>Change Status</th>
                 </tr>
 
-              ))}
+              </thead>
 
-            </tbody>
+              <tbody>
 
-          </table>
+                {issues.map(issue => (
+
+                  <tr key={issue.id}>
+
+                    <td>{issue.id}</td>
+
+                    <td>{issue.title}</td>
+
+                    <td>{issue.category}</td>
+
+                    <td>{issue.location}</td>
+
+                    <td>
+                      <span className={
+                        getStatusClass(issue.status)
+                      }>
+                        {issue.status}
+                      </span>
+                    </td>
+
+                    <td>
+                      {issue.technician}
+                    </td>
+
+                    <td>
+                      {issue.student_email}
+                    </td>
+
+                    <td>
+                      {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
+                        <div className="image-gallery">
+                          {issueImages[issue.id].map((img, idx) => (
+                            <button 
+                              key={idx} 
+                              onClick={() => setSelectedImage(img.image_url)}
+                              className="image-link"
+                              title="Click to view image"
+                            >
+                              📷 View
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        "No images"
+                      )}
+                    </td>
+
+                    <td>
+
+                      <select
+                        value={issue.technician}
+                        onChange={(e) =>
+                          handleAssignTechnician(
+                            issue.id,
+                            e.target.value
+                          )
+                        }
+                        disabled={loading}
+                      >
+
+                        {technicians.map((tech, index) => (
+
+                          <option key={index}>
+                            {tech}
+                          </option>
+
+                        ))}
+
+                      </select>
+
+                    </td>
+
+                    <td>
+
+                      <select
+                        value={issue.status}
+                        onChange={(e) =>
+                          updateStatus(
+                            issue.id,
+                            e.target.value
+                          )
+                        }
+                        disabled={loading}
+                      >
+
+                        <option>Pending</option>
+                        <option>In Progress</option>
+                        <option>Resolved</option>
+
+                      </select>
+
+                    </td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+          )}
 
         </div>
 
       </div>
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div className="modal-overlay" onClick={() => setSelectedImage(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedImage(null)}>✕</button>
+            <img src={selectedImage} alt="Issue" className="modal-image" />
+          </div>
+        </div>
+      )}
 
     </div>
 

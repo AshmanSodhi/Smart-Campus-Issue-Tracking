@@ -124,3 +124,112 @@ th {
 .resolved {
   background: green;
 }
+
+/* Image Upload Section */
+
+.image-upload-section {
+  margin-top: 15px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 5px;
+}
+
+.image-upload-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.image-upload-section input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 5px;
+}
+
+.image-preview {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Image Gallery in Table */
+
+.image-gallery {
+  display: flex;
+  gap: 5px;
+}
+
+.image-link {
+  padding: 5px 10px;
+  background: #3b82f6;
+  color: white;
+  text-decoration: none;
+  border-radius: 3px;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+}
+
+.image-link:hover {
+  background: #2563eb;
+}
+
+/* Modal Styles */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  position: relative;
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 90%;
+  max-height: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 80vh;
+  display: block;
+  border-radius: 5px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-close:hover {
+  background: #dc2626;
+}
