@@ -125,6 +125,16 @@
   background: #fbfdff;
 }
 
+.login-card textarea {
+  width: 100%;
+  padding: 12px 13px;
+  margin-top: 14px;
+  border-radius: 10px;
+  border: 1px solid #c7d7f5;
+  background: #fbfdff;
+  resize: vertical;
+}
+
 .login-card button {
   width: 100%;
   padding: 12px 14px;
@@ -152,6 +162,41 @@
 
 .login-card button.secondary:hover {
   background: #dbeafe;
+}
+
+.registration-toggle {
+  margin-top: 12px;
+}
+
+.tech-registration-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #d8e5ff;
+  background: #f6f9ff;
+}
+
+.tech-registration-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1b3f8f;
+}
+
+.tech-registration-panel p {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #4b5d86;
+}
+
+.login-success {
+  margin-top: 12px;
+  color: #0d6f4b;
+  font-size: 0.82rem;
+  text-align: left;
+  background: #e8f8f0;
+  border: 1px solid #b4e2cb;
+  border-radius: 8px;
+  padding: 8px;
 }
 
 .login-card button:disabled {

@@ -232,6 +232,17 @@ th {
   font-size: 0.8rem;
 }
 
+.review-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.review-actions .reject {
+  border-color: #f4b2b5;
+  background: #fff1f2;
+  color: #a5242f;
+}
+
 .image-gallery {
   display: flex;
   gap: 6px;

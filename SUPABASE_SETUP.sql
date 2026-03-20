@@ -51,6 +51,24 @@ CREATE TABLE notifications (
 CREATE INDEX idx_notifications_recipient_email ON notifications(recipient_email);
 CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 
+-- ============ CREATE TECHNICIAN APPLICATIONS TABLE ============
+CREATE TABLE technician_applications (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  full_name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  department VARCHAR(255) NOT NULL,
+  phone VARCHAR(50) NOT NULL,
+  reason TEXT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  review_note TEXT,
+  reviewed_by VARCHAR(255),
+  reviewed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_technician_applications_email ON technician_applications(email);
+CREATE INDEX idx_technician_applications_status ON technician_applications(status);
+
 -- ============ CREATE STORAGE BUCKET ============
 -- Do this via Supabase Dashboard:
 -- 1. Go to Storage → Buckets
@@ -82,5 +100,18 @@ CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 --   title VARCHAR(255) NOT NULL,
 --   message TEXT NOT NULL,
 --   is_read BOOLEAN NOT NULL DEFAULT FALSE,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+-- CREATE TABLE IF NOT EXISTS technician_applications (
+--   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+--   full_name VARCHAR(255) NOT NULL,
+--   email VARCHAR(255) NOT NULL,
+--   department VARCHAR(255) NOT NULL,
+--   phone VARCHAR(50) NOT NULL,
+--   reason TEXT NOT NULL,
+--   status VARCHAR(30) NOT NULL DEFAULT 'pending',
+--   review_note TEXT,
+--   reviewed_by VARCHAR(255),
+--   reviewed_at TIMESTAMP,
 --   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 -- );

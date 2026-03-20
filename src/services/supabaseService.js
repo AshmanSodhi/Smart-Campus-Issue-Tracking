@@ -42,6 +42,66 @@ function getRoleFromEmail(email) {
   return "student";
 }
 
+function isPrivilegedRoleEmail(email) {
+  const normalized = email.toLowerCase();
+  return ADMIN_EMAILS.includes(normalized) || TECHNICIAN_EMAILS.includes(normalized);
+}
+
+async function isApprovedTechnicianEmail(email) {
+  try {
+    const normalized = email.toLowerCase();
+    const { data, error } = await supabase
+      .from("technician_applications")
+      .select("id")
+      .eq("email", normalized)
+      .eq("status", "approved")
+      .limit(1);
+
+    if (error) {
+      if (error.code === "42P01") {
+        return false;
+      }
+      console.error("Error checking approved technician list:", error);
+      return false;
+    }
+
+    return Array.isArray(data) && data.length > 0;
+  } catch (err) {
+    console.error("Error:", err);
+    return false;
+  }
+}
+
+async function resolveRoleByEmail(email) {
+  const normalized = (email || "").toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (ADMIN_EMAILS.includes(normalized)) {
+    return "admin";
+  }
+
+  if (TECHNICIAN_EMAILS.includes(normalized)) {
+    return "technician";
+  }
+
+  if (await isApprovedTechnicianEmail(normalized)) {
+    return "technician";
+  }
+
+  if (isAllowedStudentDomain(normalized)) {
+    return "student";
+  }
+
+  return null;
+}
+
+async function isAllowedGoogleAccount(email) {
+  const role = await resolveRoleByEmail(email);
+  return role === "student" || role === "admin" || role === "technician";
+}
+
 function isAllowedStudentDomain(email) {
   return email.toLowerCase().endsWith(`@${ALLOWED_GOOGLE_DOMAIN}`);
 }
@@ -68,7 +128,7 @@ export function isTestEmailLoginEnabled() {
   return ENABLE_TEST_EMAIL_LOGIN;
 }
 
-export function loginWithEmailForTesting(emailInput) {
+export async function loginWithEmailForTesting(emailInput) {
   if (!ENABLE_TEST_EMAIL_LOGIN) {
     throw new Error("Test email login is disabled.");
   }
@@ -78,11 +138,19 @@ export function loginWithEmailForTesting(emailInput) {
     throw new Error("Email is required.");
   }
 
-  if (!isAllowedStudentDomain(email)) {
-    throw new Error(`Only @${ALLOWED_GOOGLE_DOMAIN} accounts are allowed.`);
+  const role = await resolveRoleByEmail(email);
+  if (!role) {
+    throw new Error("Only approved student/admin/technician accounts are allowed.");
   }
 
-  const role = getRoleFromEmail(email);
+  if (role === "student") {
+    throw new Error("Students can only login with Google OAuth.");
+  }
+
+  if (!isPrivilegedRoleEmail(email) && role !== "technician") {
+    throw new Error("Email login is only allowed for configured admin or technician accounts.");
+  }
+
   localStorage.setItem("userRole", role);
   localStorage.setItem("userEmail", email);
   return role;
@@ -105,14 +173,19 @@ export async function initializeAuthFromSession() {
     return null;
   }
 
-  if (!isAllowedStudentDomain(email)) {
+  if (!(await isAllowedGoogleAccount(email))) {
     console.error("[Auth] Email domain not allowed:", email);
     await supabase.auth.signOut();
     clearLocalAuth();
-    throw new Error(`Only @${ALLOWED_GOOGLE_DOMAIN} accounts are allowed.`);
+    throw new Error(`Only @${ALLOWED_GOOGLE_DOMAIN} students or configured admin/technician accounts are allowed.`);
   }
 
-  const role = getRoleFromEmail(email);
+  const role = await resolveRoleByEmail(email);
+  if (!role) {
+    clearLocalAuth();
+    return null;
+  }
+
   localStorage.setItem("userRole", role);
   localStorage.setItem("userEmail", email);
   return role;
@@ -137,6 +210,146 @@ export function getCurrentUserProfile() {
 
 export function getTechnicianDirectory() {
   return TECHNICIAN_EMAILS;
+}
+
+export async function getAssignableTechnicians() {
+  const configured = [...TECHNICIAN_EMAILS];
+
+  try {
+    const { data, error } = await supabase
+      .from("technician_applications")
+      .select("email")
+      .eq("status", "approved");
+
+    if (error) {
+      if (error.code === "42P01") {
+        return configured;
+      }
+      console.error("Error fetching approved technicians:", error);
+      return configured;
+    }
+
+    const approved = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
+    return Array.from(new Set([...configured, ...approved]));
+  } catch (err) {
+    console.error("Error:", err);
+    return configured;
+  }
+}
+
+export async function submitTechnicianApplication(application) {
+  const fullName = (application.fullName || "").trim();
+  const email = (application.email || "").trim().toLowerCase();
+  const department = (application.department || "").trim();
+  const phone = (application.phone || "").trim();
+  const reason = (application.reason || "").trim();
+
+  if (!fullName || !email || !department || !phone || !reason) {
+    throw new Error("All registration fields are required.");
+  }
+
+  const existingRole = await resolveRoleByEmail(email);
+  if (existingRole === "admin" || existingRole === "technician") {
+    throw new Error("This email already has elevated access.");
+  }
+
+  const { data, error } = await supabase
+    .from("technician_applications")
+    .insert([
+      {
+        full_name: fullName,
+        email,
+        department,
+        phone,
+        reason,
+        status: "pending",
+      },
+    ])
+    .select();
+
+  if (error) {
+    if (error.code === "42P01") {
+      throw new Error("Technician applications table is missing. Run the latest SQL setup.");
+    }
+    console.error("Error submitting technician application:", error);
+    throw new Error("Failed to submit technician application.");
+  }
+
+  await createNotificationForRole("admin", {
+    title: "New technician registration",
+    message: `${fullName} requested technician access (${email}).`,
+  });
+
+  return data?.[0] || null;
+}
+
+export async function getTechnicianApplications(status = "pending") {
+  try {
+    let query = supabase
+      .from("technician_applications")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (status && status !== "all") {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      if (error.code === "42P01") {
+        return [];
+      }
+      console.error("Error fetching technician applications:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error("Error:", err);
+    return [];
+  }
+}
+
+export async function reviewTechnicianApplication(applicationId, approve, reviewNote = "") {
+  const adminEmail = getEmail() || "admin";
+  const status = approve ? "approved" : "rejected";
+
+  try {
+    const { data, error } = await supabase
+      .from("technician_applications")
+      .update({
+        status,
+        review_note: reviewNote || null,
+        reviewed_by: adminEmail,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "42P01") {
+        throw new Error("Technician applications table is missing. Run the latest SQL setup.");
+      }
+      console.error("Error reviewing technician application:", error);
+      throw new Error("Failed to update technician application.");
+    }
+
+    if (data?.email) {
+      await createNotificationForEmail(data.email, {
+        title: `Technician application ${status}`,
+        message: approve
+          ? "Your technician access request was approved. You can now login as technician."
+          : `Your technician access request was rejected.${reviewNote ? ` Note: ${reviewNote}` : ""}`,
+      });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    throw err;
+  }
 }
 
 export async function logout() {

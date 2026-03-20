@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   assignTechnician,
+  getAssignableTechnicians,
   getAllIssues,
   getIssueImages,
   getNotifications,
-  getTechnicianDirectory,
+  getTechnicianApplications,
   logout,
   markNotificationRead,
+  reviewTechnicianApplication,
   updateIssueStatus,
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +20,8 @@ function AdminDashboard() {
   const [issues, setIssues] = useState([]);
   const [issueImages, setIssueImages] = useState({});
   const [notifications, setNotifications] = useState([]);
+  const [techApplications, setTechApplications] = useState([]);
+  const [technicians, setTechnicians] = useState(["Not Assigned"]);
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [feedback, setFeedback] = useState("");
@@ -30,7 +34,6 @@ function AdminDashboard() {
     priority: "All",
   });
 
-  const technicians = useMemo(() => ["Not Assigned", ...getTechnicianDirectory()], []);
   const metrics = useMemo(() => {
     const pending = issues.filter((issue) => issue.status === "Pending").length;
     const inProgress = issues.filter((issue) => issue.status === "In Progress").length;
@@ -45,6 +48,11 @@ function AdminDashboard() {
       closed,
     };
   }, [issues]);
+
+  const pendingApplications = useMemo(
+    () => techApplications.filter((application) => application.status === "pending"),
+    [techApplications]
+  );
   const statusFilterRef = useRef(null);
 
   useEffect(() => {
@@ -78,6 +86,13 @@ function AdminDashboard() {
 
     const fetchedNotifications = await getNotifications();
     setNotifications(fetchedNotifications);
+
+    const fetchedTechApplications = await getTechnicianApplications("all");
+    setTechApplications(fetchedTechApplications);
+
+    const fetchedTechnicians = await getAssignableTechnicians();
+    setTechnicians(["Not Assigned", ...fetchedTechnicians]);
+
     setLoading(false);
   };
 
@@ -125,6 +140,18 @@ function AdminDashboard() {
   const markRead = async (notificationId) => {
     await markNotificationRead(notificationId);
     await loadDashboard();
+  };
+
+  const handleReviewTechnician = async (applicationId, approve) => {
+    setLoading(true);
+    try {
+      await reviewTechnicianApplication(applicationId, approve);
+      await loadDashboard();
+      setFeedback(approve ? "Technician application approved." : "Technician application rejected.");
+    } catch (error) {
+      setFeedback(error.message || "Unable to review technician application.");
+    }
+    setLoading(false);
   };
 
   const getStatusClass = (status) => {
@@ -205,6 +232,54 @@ function AdminDashboard() {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>Technician Registration Requests</h3>
+          {pendingApplications.length === 0 ? (
+            <p>No pending technician registration requests.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>Phone</th>
+                  <th>Reason</th>
+                  <th>Requested At</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingApplications.map((application) => (
+                  <tr key={application.id}>
+                    <td>{application.full_name}</td>
+                    <td>{application.email}</td>
+                    <td>{application.department}</td>
+                    <td>{application.phone}</td>
+                    <td>{application.reason}</td>
+                    <td>{new Date(application.created_at).toLocaleString()}</td>
+                    <td className="review-actions">
+                      <button
+                        onClick={() => handleReviewTechnician(application.id, true)}
+                        disabled={loading}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="reject"
+                        onClick={() => handleReviewTechnician(application.id, false)}
+                        disabled={loading}
+                      >
+                        Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
 
