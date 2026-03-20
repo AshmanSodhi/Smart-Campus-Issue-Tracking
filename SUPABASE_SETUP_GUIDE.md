@@ -37,7 +37,17 @@
    VITE_SUPABASE_ANON_KEY=your-anon-key-here
    VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
    VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
+   VITE_TECHNICIAN_EMAILS=tech1@vitstudent.ac.in,tech2@vitstudent.ac.in
    ```
+
+## Step 4.1: Update Existing DB (if already created)
+If you already created tables earlier, run the optional ALTER statements at the bottom of `SUPABASE_SETUP.sql` to add:
+- `issues.priority`
+- `issues.completion_note`
+- `issues.student_feedback`
+- `issues.resolved_at`
+- `issues.closed_at`
+- `notifications` table
 
 ## Step 5: Configure Google OAuth
 1. In Supabase Dashboard, open **Authentication → Providers → Google**

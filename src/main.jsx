@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import './index.css'
 import { checkSetup } from './services/supabaseService'
 
 // Expose diagnostic function to browser console

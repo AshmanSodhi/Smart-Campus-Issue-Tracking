@@ -48,8 +48,14 @@
    VITE_SUPABASE_ANON_KEY=your-anon-key
    VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
    VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
+   VITE_TECHNICIAN_EMAILS=tech1@vitstudent.ac.in,tech2@vitstudent.ac.in
    ```
 4. Save the file
+
+### Step 4.6️⃣: Apply Updated Schema
+1. Open **SQL Editor**
+2. Run `SUPABASE_SETUP.sql` again on a fresh DB, OR run the `OPTIONAL MIGRATION` ALTER statements at the bottom for existing DBs
+3. This adds `priority`, resolution metadata, and `notifications` table
 
 ### Step 4.5️⃣: Enable Google Login in Supabase Auth
 1. Go to **Authentication → Providers → Google**
@@ -71,6 +77,7 @@ npm run dev
 2. Use a valid `@vitstudent.ac.in` account
 3. Submit an issue with an image
 4. Login with an admin email listed in `VITE_ADMIN_EMAILS`
+5. Login with a technician email listed in `VITE_TECHNICIAN_EMAILS`
 5. See all issues and manage them
 6. Click "View" on images to see the uploaded photo
 
@@ -106,6 +113,7 @@ npm run dev
 - Uses Supabase Google OAuth now
 - Only `@vitstudent.ac.in` accounts are allowed
 - Admin role is derived from `VITE_ADMIN_EMAILS`; all others are students
+- Technician role is derived from `VITE_TECHNICIAN_EMAILS`
 
 ---
 
