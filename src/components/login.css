@@ -68,10 +68,10 @@
 
 .login-card {
   background: #fff;
-  padding: clamp(28px, 5vw, 48px) clamp(24px, 5vw, 44px) clamp(24px, 4vw, 36px);
+  padding: clamp(24px, 5vw, 44px);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .login-subtitle {
@@ -79,7 +79,6 @@
   color: #4a5d86;
   font-size: 0.95rem;
   line-height: 1.45;
-  min-height: 44px;
 }
 
 .showcase-points {
@@ -100,50 +99,21 @@
   font-size: 0.84rem;
 }
 
-.login-tabs {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.portal-roles {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.login-tabs .tab {
-  margin-top: 0;
-  padding: 9px 10px;
-  border-radius: 9px;
-  border: 1px solid #ccdbf8;
-  background: #f1f6ff;
-  color: #254383;
-  font-size: 0.82rem;
+.portal-roles span {
+  font-size: 0.78rem;
   font-weight: 600;
-  cursor: pointer;
-}
-
-.login-tabs .tab.active {
-  border-color: #1d4ed8;
-  background: #1d4ed8;
-  color: #ffffff;
-}
-
-.login-tabs .tab:hover {
-  transform: translateY(-1px);
-}
-
-.role-auth-panel {
-  margin-top: 10px;
-  min-height: 196px;
-  display: flex;
-  flex-direction: column;
-}
-
-.auth-spacer {
-  margin-top: 14px;
-  height: 100px;
-}
-
-.role-extra-panel {
-  margin-top: 4px;
-  min-height: 44px;
+  color: #204187;
+  background: #eef4ff;
+  border: 1px solid #d1defa;
+  border-radius: 999px;
+  padding: 6px 11px;
 }
 
 .login-card input {
@@ -195,7 +165,7 @@
 }
 
 .registration-toggle {
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .tech-registration-panel {
@@ -269,9 +239,5 @@
 
   .login-showcase {
     min-height: 240px;
-  }
-
-  .role-auth-panel {
-    min-height: 196px;
   }
 }
