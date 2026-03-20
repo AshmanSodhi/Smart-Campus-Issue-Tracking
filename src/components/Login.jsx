@@ -12,6 +12,7 @@ import "./login.css";
 function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [selectedRole, setSelectedRole] = useState("student");
   const [testEmail, setTestEmail] = useState("");
   const [showTechRegistration, setShowTechRegistration] = useState(false);
   const [registrationMessage, setRegistrationMessage] = useState("");
@@ -45,6 +46,11 @@ function Login() {
     restoreSession();
   }, [navigate]);
 
+  useEffect(() => {
+    setErrorMessage("");
+    setRegistrationMessage("");
+  }, [selectedRole]);
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     setErrorMessage("");
@@ -72,6 +78,8 @@ function Login() {
       setErrorMessage(error.message || "Test email login failed.");
     }
   };
+
+  const showEmailLogin = selectedRole !== "student" && isTestEmailLoginEnabled();
 
   const updateTechField = (field, value) => {
     setTechForm((prev) => ({
@@ -121,90 +129,120 @@ function Login() {
 
         <section className="login-card" aria-label="Sign in to Smart Campus">
           <h2>Welcome Back</h2>
-          <p className="login-subtitle">
-            Students must use Google OAuth. Admin and Technician can use Google or approved email login.
-          </p>
+          <p className="login-subtitle">Choose your role and continue with the available sign-in options.</p>
 
-          <div className="portal-roles" aria-label="Portal role options">
-            <span>Student</span>
-            <span>Admin</span>
-            <span>Technician</span>
+          <div className="login-tabs" role="tablist" aria-label="Select user type">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedRole === "student"}
+              className={selectedRole === "student" ? "tab active" : "tab"}
+              onClick={() => setSelectedRole("student")}
+            >
+              Student
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedRole === "admin"}
+              className={selectedRole === "admin" ? "tab active" : "tab"}
+              onClick={() => setSelectedRole("admin")}
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedRole === "technician"}
+              className={selectedRole === "technician" ? "tab active" : "tab"}
+              onClick={() => setSelectedRole("technician")}
+            >
+              Technician
+            </button>
           </div>
 
-          <button onClick={handleGoogleLogin} disabled={loading}>
-            {loading ? "Redirecting..." : "Continue with Google"}
-          </button>
+          <div className="role-auth-panel" aria-live="polite">
+            <button onClick={handleGoogleLogin} disabled={loading}>
+              {loading ? "Redirecting..." : `Continue with Google (${selectedRole})`}
+            </button>
 
-          {isTestEmailLoginEnabled() && (
-            <>
-              <div className="login-divider">or</div>
-              <input
-                type="email"
-                placeholder="Admin/Technician email login"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
-              <button className="secondary" onClick={handleTestEmailLogin} disabled={loading}>
-                Login with Email (Admin/Tech)
-              </button>
-            </>
-          )}
+            {showEmailLogin ? (
+              <>
+                <div className="login-divider">or</div>
+                <input
+                  type="email"
+                  placeholder={selectedRole === "admin" ? "Admin email login" : "Technician email login"}
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                />
+                <button className="secondary" onClick={handleTestEmailLogin} disabled={loading}>
+                  {selectedRole === "admin" ? "Login with Email (Admin)" : "Login with Email (Technician)"}
+                </button>
+              </>
+            ) : (
+              <div className="auth-spacer" aria-hidden="true" />
+            )}
+          </div>
 
           {errorMessage && <div className="login-error">{errorMessage}</div>}
 
-          <button
-            type="button"
-            className="secondary registration-toggle"
-            onClick={() => setShowTechRegistration((prev) => !prev)}
-            disabled={registrationLoading || loading}
-          >
-            {showTechRegistration ? "Hide Technician Registration" : "Apply for Technician Access"}
-          </button>
-
-          {showTechRegistration && (
-            <div className="tech-registration-panel">
-              <h3>Technician Registration</h3>
-              <p>Submit your details. Admin approval is required before technician login access is enabled.</p>
-
-              <input
-                placeholder="Full Name"
-                value={techForm.fullName}
-                onChange={(e) => updateTechField("fullName", e.target.value)}
-                disabled={registrationLoading}
-              />
-              <input
-                placeholder="Email"
-                value={techForm.email}
-                onChange={(e) => updateTechField("email", e.target.value)}
-                disabled={registrationLoading}
-              />
-              <input
-                placeholder="Department"
-                value={techForm.department}
-                onChange={(e) => updateTechField("department", e.target.value)}
-                disabled={registrationLoading}
-              />
-              <input
-                placeholder="Phone Number"
-                value={techForm.phone}
-                onChange={(e) => updateTechField("phone", e.target.value)}
-                disabled={registrationLoading}
-              />
-              <textarea
-                placeholder="Why do you need technician access?"
-                value={techForm.reason}
-                onChange={(e) => updateTechField("reason", e.target.value)}
-                disabled={registrationLoading}
-                rows={3}
-              />
-
-              <button type="button" onClick={handleTechRegistration} disabled={registrationLoading}>
-                {registrationLoading ? "Submitting..." : "Submit Application"}
+          <div className="role-extra-panel">
+            {selectedRole === "technician" && (
+              <button
+                type="button"
+                className="secondary registration-toggle"
+                onClick={() => setShowTechRegistration((prev) => !prev)}
+                disabled={registrationLoading || loading}
+              >
+                {showTechRegistration ? "Hide Technician Registration" : "Apply for Technician Access"}
               </button>
+            )}
 
-              {registrationMessage && <div className="login-success">{registrationMessage}</div>}
-            </div>
-          )}
+            {selectedRole === "technician" && showTechRegistration && (
+              <div className="tech-registration-panel">
+                <h3>Technician Registration</h3>
+                <p>Submit your details. Admin approval is required before technician login access is enabled.</p>
+
+                <input
+                  placeholder="Full Name"
+                  value={techForm.fullName}
+                  onChange={(e) => updateTechField("fullName", e.target.value)}
+                  disabled={registrationLoading}
+                />
+                <input
+                  placeholder="Email"
+                  value={techForm.email}
+                  onChange={(e) => updateTechField("email", e.target.value)}
+                  disabled={registrationLoading}
+                />
+                <input
+                  placeholder="Department"
+                  value={techForm.department}
+                  onChange={(e) => updateTechField("department", e.target.value)}
+                  disabled={registrationLoading}
+                />
+                <input
+                  placeholder="Phone Number"
+                  value={techForm.phone}
+                  onChange={(e) => updateTechField("phone", e.target.value)}
+                  disabled={registrationLoading}
+                />
+                <textarea
+                  placeholder="Why do you need technician access?"
+                  value={techForm.reason}
+                  onChange={(e) => updateTechField("reason", e.target.value)}
+                  disabled={registrationLoading}
+                  rows={3}
+                />
+
+                <button type="button" onClick={handleTechRegistration} disabled={registrationLoading}>
+                  {registrationLoading ? "Submitting..." : "Submit Application"}
+                </button>
+
+                {registrationMessage && <div className="login-success">{registrationMessage}</div>}
+              </div>
+            )}
+          </div>
 
           <div className="login-info">
             Use your <strong>@vitstudent.ac.in</strong> account. Google is primary login.
