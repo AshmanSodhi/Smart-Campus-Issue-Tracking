@@ -51,6 +51,18 @@ CREATE TABLE notifications (
 CREATE INDEX idx_notifications_recipient_email ON notifications(recipient_email);
 CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 
+-- ============ CREATE USER_ROLES TABLE ============
+CREATE TABLE user_roles (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  role VARCHAR(30) NOT NULL CHECK (role IN ('student', 'admin', 'technician')),
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_user_roles_email ON user_roles(email);
+CREATE INDEX idx_user_roles_role ON user_roles(role);
+
 -- ============ CREATE TECHNICIAN APPLICATIONS TABLE ============
 CREATE TABLE technician_applications (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -113,5 +125,12 @@ CREATE INDEX idx_technician_applications_status ON technician_applications(statu
 --   review_note TEXT,
 --   reviewed_by VARCHAR(255),
 --   reviewed_at TIMESTAMP,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+-- CREATE TABLE IF NOT EXISTS user_roles (
+--   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+--   email VARCHAR(255) NOT NULL UNIQUE,
+--   role VARCHAR(30) NOT NULL CHECK (role IN ('student', 'admin', 'technician')),
+--   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 --   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 -- );

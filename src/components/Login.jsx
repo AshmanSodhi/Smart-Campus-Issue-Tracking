@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   initializeAuthFromSession,
-  isTestEmailLoginEnabled,
-  loginWithEmailForTesting,
+  loginWithEmailAndPassword,
   signInWithGoogle,
   submitTechnicianApplication,
 } from "../services/supabaseService";
@@ -12,7 +11,8 @@ import "./login.css";
 function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [testEmail, setTestEmail] = useState("");
+  const [emailLoginInput, setTestEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [showTechRegistration, setShowTechRegistration] = useState(false);
   const [registrationMessage, setRegistrationMessage] = useState("");
   const [registrationLoading, setRegistrationLoading] = useState(false);
@@ -57,10 +57,10 @@ function Login() {
     }
   };
 
-  const handleTestEmailLogin = async () => {
+  const handleEmailPasswordLogin = async () => {
     setErrorMessage("");
     try {
-      const role = await loginWithEmailForTesting(testEmail);
+      const role = await loginWithEmailAndPassword(emailLoginInput, adminPassword);
       if (role === "student") {
         navigate("/student");
       } else if (role === "admin") {
@@ -69,7 +69,7 @@ function Login() {
         navigate("/technician");
       }
     } catch (error) {
-      setErrorMessage(error.message || "Test email login failed.");
+      setErrorMessage(error.message || "Email/password login failed.");
     }
   };
 
@@ -122,7 +122,7 @@ function Login() {
         <section className="login-card" aria-label="Sign in to Smart Campus">
           <h2>Welcome Back</h2>
           <p className="login-subtitle">
-            Students must use Google OAuth. Admin and Technician can use Google or approved email login.
+            Students must use Google OAuth. Admin and Technician can login with email and password.
           </p>
 
           <div className="portal-roles" aria-label="Portal role options">
@@ -135,20 +135,22 @@ function Login() {
             {loading ? "Redirecting..." : "Continue with Google"}
           </button>
 
-          {isTestEmailLoginEnabled() && (
-            <>
-              <div className="login-divider">or</div>
-              <input
-                type="email"
-                placeholder="Admin/Technician email login"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
-              <button className="secondary" onClick={handleTestEmailLogin} disabled={loading}>
-                Login with Email (Admin/Tech)
-              </button>
-            </>
-          )}
+          <div className="login-divider">or</div>
+          <input
+            type="email"
+            placeholder="Admin/Technician email"
+            value={emailLoginInput}
+            onChange={(e) => setTestEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+          />
+          <button className="secondary" onClick={handleEmailPasswordLogin} disabled={loading}>
+            Login with Email + Password
+          </button>
 
           {errorMessage && <div className="login-error">{errorMessage}</div>}
 
@@ -207,7 +209,7 @@ function Login() {
           )}
 
           <div className="login-info">
-            Use your <strong>@vitstudent.ac.in</strong> account. Google is primary login.
+            Use Google for student access. Admin/technician access requires database role + password auth.
           </div>
         </section>
       </div>

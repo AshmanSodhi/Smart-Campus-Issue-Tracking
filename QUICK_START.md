@@ -46,7 +46,6 @@
    ```
    VITE_SUPABASE_URL=https://your-url.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key
-   VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
    VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
    VITE_TECHNICIAN_EMAILS=tech1@vitstudent.ac.in,tech2@vitstudent.ac.in
    ```
@@ -74,10 +73,10 @@ npm run dev
 ## 🧪 Test It
 
 1. Click **Continue with Google** on login page
-2. Use a valid `@vitstudent.ac.in` account
+2. Use any Google account
 3. Submit an issue with an image
-4. Login with an admin email listed in `VITE_ADMIN_EMAILS`
-5. Login with a technician email listed in `VITE_TECHNICIAN_EMAILS`
+4. Verify admin routing with an email mapped to `admin` in `user_roles`
+5. Verify technician routing with an email mapped to `technician` in `user_roles`
 5. See all issues and manage them
 6. Click "View" on images to see the uploaded photo
 
@@ -111,9 +110,9 @@ npm run dev
 
 ### Authentication
 - Uses Supabase Google OAuth now
-- Only `@vitstudent.ac.in` accounts are allowed
-- Admin role is derived from `VITE_ADMIN_EMAILS`; all others are students
-- Technician role is derived from `VITE_TECHNICIAN_EMAILS`
+- Roles are resolved from `user_roles` in database
+- Any email can sign in; role controls dashboard access
+- Approved technician applications are promoted to `technician`
 
 ---
 
