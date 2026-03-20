@@ -918,3 +918,42 @@ export async function checkSetup() {
 
   console.log("\nDiagnostic complete\n");
 }
+
+export async function getAllUserRoles() {
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('*')
+      .order('role', { ascending: true })
+      .order('email', { ascending: true });
+      
+    if (error) {
+      if (error.code === '42P01') return [];
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user roles:', err);
+    return [];
+  }
+}
+
+export async function adminUpsertUserRole(email, role) {
+  const normalizedEmail = (email || '').toLowerCase();
+  const normalizedRole = normalizeRole((role || '').toLowerCase());
+  
+  if (!normalizedEmail || !normalizedRole) throw new Error('Invalid email or role');
+  
+  const { data, error } = await supabase.from('user_roles').upsert([{ email: normalizedEmail, role: normalizedRole, updated_at: new Date().toISOString() }], { onConflict: 'email' }).select();
+  if (error) throw error;
+  return data;
+}
+
+export async function adminDeleteUserRole(email) {
+  const normalizedEmail = (email || '').toLowerCase();
+  if (!normalizedEmail) throw new Error('Invalid email');
+  
+  const { error } = await supabase.from('user_roles').delete().eq('email', normalizedEmail);
+  if (error) throw error;
+  return true;
+}
