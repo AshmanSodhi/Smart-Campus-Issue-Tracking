@@ -35,14 +35,28 @@
    ```
    VITE_SUPABASE_URL=https://your-project.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key-here
+   VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
+   VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
    ```
 
-## Step 5: Test Connection
+## Step 5: Configure Google OAuth
+1. In Supabase Dashboard, open **Authentication → Providers → Google**
+2. Enable Google provider
+3. Add your Google OAuth Client ID and Client Secret
+4. Add your app redirect URL in Supabase, for local dev:
+   - `http://localhost:5173`
+5. In Google Cloud Console OAuth client config, add the same redirect URL
+
+## Step 6: Restrict Login Domain
+- App allows only `@vitstudent.ac.in` logins
+- Users outside this domain are signed out automatically
+- Admin access is controlled through `VITE_ADMIN_EMAILS`
+
+## Step 7: Test Connection
 1. Save `.env.local`
 2. In terminal: `npm run dev`
-3. Try logging in with:
-   - Email: student@campus.com
-   - Password: 1234
+3. Click **Continue with Google**
+4. Sign in using a `@vitstudent.ac.in` account
 
 ## Technician List (for AdminDashboard)
 The admin can assign issues to:

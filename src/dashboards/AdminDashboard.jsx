@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { logout, getRole, getAllIssues, updateIssueStatus, assignTechnician, getIssueImages } from "../services/supabaseService";
+import { logout, getRole, getAllIssues, updateIssueStatus, assignTechnician, getIssueImages, initializeAuthFromSession } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
 import "./admin.css";
 
@@ -22,14 +22,22 @@ function AdminDashboard() {
   ];
 
   useEffect(() => {
+    const validateSession = async () => {
+      try {
+        const role = getRole() || await initializeAuthFromSession();
+        if (role !== "admin") {
+          navigate("/");
+          return;
+        }
+        await loadIssues();
+      } catch (error) {
+        alert(error.message || "Please sign in with an authorized account.");
+        navigate("/");
+      }
+    };
 
-    if (getRole() !== "admin") {
-      navigate("/");
-    }
-
-    loadIssues();
-
-  }, []);
+    validateSession();
+  }, [navigate]);
 
   const loadIssues = async () => {
 
@@ -84,8 +92,8 @@ function AdminDashboard() {
 
         <button>Manage Issues</button>
 
-        <button onClick={() => {
-          logout();
+        <button onClick={async () => {
+          await logout();
           navigate("/");
         }}>
           Logout

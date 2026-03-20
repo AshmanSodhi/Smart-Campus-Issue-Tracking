@@ -43,6 +43,18 @@
   background: #1d4ed8;
 }
 
+.login-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-error {
+  margin-top: 12px;
+  color: #b91c1c;
+  font-size: 13px;
+  text-align: center;
+}
+
 .login-info {
   margin-top: 15px;
   font-size: 12px;

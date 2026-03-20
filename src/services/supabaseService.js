@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 // Initialize Supabase client
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const ALLOWED_GOOGLE_DOMAIN = (import.meta.env.VITE_ALLOWED_GOOGLE_DOMAIN || "vitstudent.ac.in").toLowerCase();
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 console.log("🔐 [Supabase Init] URL:", SUPABASE_URL);
 console.log("🔐 [Supabase Init] Key exists:", !!SUPABASE_ANON_KEY);
@@ -14,32 +19,68 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 console.log("✅ [Supabase] Client initialized successfully");
 
-// Hard-coded users for authentication (temporary)
-const users = [
-  {
-    email: "student@campus.com",
-    password: "1234",
-    role: "student",
-  },
-  {
-    email: "admin@campus.com",
-    password: "1234",
-    role: "admin",
-  },
-];
-
 // ============ AUTH FUNCTIONS ============
 
-export function login(email, password) {
-  const user = users.find((u) => u.email === email && u.password === password);
+function clearLocalAuth() {
+  localStorage.removeItem("userRole");
+  localStorage.removeItem("userEmail");
+}
 
-  if (user) {
-    localStorage.setItem("userRole", user.role);
-    localStorage.setItem("userEmail", email);
-    return user.role;
+function getRoleFromEmail(email) {
+  const normalized = email.toLowerCase();
+  return ADMIN_EMAILS.includes(normalized) ? "admin" : "student";
+}
+
+function isAllowedStudentDomain(email) {
+  return email.toLowerCase().endsWith(`@${ALLOWED_GOOGLE_DOMAIN}`);
+}
+
+export async function signInWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin,
+      queryParams: {
+        hd: ALLOWED_GOOGLE_DOMAIN,
+        prompt: "select_account",
+      },
+    },
+  });
+
+  if (error) {
+    console.error("❌ [Auth] Google sign-in failed:", error);
+    throw error;
+  }
+}
+
+export async function initializeAuthFromSession() {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    console.error("❌ [Auth] Session fetch failed:", error);
+    clearLocalAuth();
+    return null;
   }
 
-  return null;
+  const user = data?.session?.user;
+  const email = user?.email;
+
+  if (!email) {
+    clearLocalAuth();
+    return null;
+  }
+
+  if (!isAllowedStudentDomain(email)) {
+    console.error("❌ [Auth] Email domain not allowed:", email);
+    await supabase.auth.signOut();
+    clearLocalAuth();
+    throw new Error(`Only @${ALLOWED_GOOGLE_DOMAIN} accounts are allowed.`);
+  }
+
+  const role = getRoleFromEmail(email);
+  localStorage.setItem("userRole", role);
+  localStorage.setItem("userEmail", email);
+  return role;
 }
 
 export function getRole() {
@@ -50,9 +91,12 @@ export function getEmail() {
   return localStorage.getItem("userEmail");
 }
 
-export function logout() {
-  localStorage.removeItem("userRole");
-  localStorage.removeItem("userEmail");
+export async function logout() {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("❌ [Auth] Sign-out failed:", error);
+  }
+  clearLocalAuth();
 }
 
 // ============ ISSUE FUNCTIONS ============

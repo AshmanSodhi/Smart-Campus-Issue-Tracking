@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { logout, getRole } from "../services/supabaseService";
+import { logout, getRole, initializeAuthFromSession } from "../services/supabaseService";
 import { 
   submitIssue, 
   getStudentIssues, 
@@ -27,14 +27,22 @@ function StudentDashboard() {
   const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
+    const validateSession = async () => {
+      try {
+        const role = getRole() || await initializeAuthFromSession();
+        if (role !== "student") {
+          navigate("/");
+          return;
+        }
+        await loadIssues();
+      } catch (error) {
+        alert(error.message || "Please sign in with your VIT student account.");
+        navigate("/");
+      }
+    };
 
-    if (getRole() !== "student") {
-      navigate("/");
-    }
-
-    loadIssues();
-
-  }, []);
+    validateSession();
+  }, [navigate]);
 
   const loadIssues = async () => {
 
@@ -196,8 +204,8 @@ function StudentDashboard() {
           Dashboard
         </button>
 
-        <button onClick={() => {
-          logout();
+        <button onClick={async () => {
+          await logout();
           navigate("/");
         }}>
           Logout

@@ -46,8 +46,16 @@
    ```
    VITE_SUPABASE_URL=https://your-url.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key
+   VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
+   VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
    ```
 4. Save the file
+
+### Step 4.5️⃣: Enable Google Login in Supabase Auth
+1. Go to **Authentication → Providers → Google**
+2. Enable Google provider and add your Google OAuth Client ID + Secret
+3. Add redirect URL: `http://localhost:5173`
+4. In Google Cloud Console, add the same redirect URL in OAuth client settings
 
 ### Step 5️⃣: Start Development
 ```bash
@@ -59,11 +67,12 @@ npm run dev
 
 ## 🧪 Test It
 
-1. Login: `student@campus.com` / `1234`
-2. Submit an issue with an image
-3. Logout, login as `admin@campus.com` / `1234`
-4. See all issues and manage them
-5. Click "View" on images to see the uploaded photo
+1. Click **Continue with Google** on login page
+2. Use a valid `@vitstudent.ac.in` account
+3. Submit an issue with an image
+4. Login with an admin email listed in `VITE_ADMIN_EMAILS`
+5. See all issues and manage them
+6. Click "View" on images to see the uploaded photo
 
 ---
 
@@ -94,8 +103,9 @@ npm run dev
 - URLs stored in database for easy retrieval
 
 ### Authentication
-- Still using hard-coded users (no real backend auth yet)
-- Can upgrade later if needed
+- Uses Supabase Google OAuth now
+- Only `@vitstudent.ac.in` accounts are allowed
+- Admin role is derived from `VITE_ADMIN_EMAILS`; all others are students
 
 ---
 

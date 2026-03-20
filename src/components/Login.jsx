@@ -1,27 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../services/supabaseService";
+import { initializeAuthFromSession, signInWithGoogle } from "../services/supabaseService";
 import "./login.css";
 
 function Login() {
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const navigate = useNavigate();
 
-  const handleLogin = () => {
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const role = await initializeAuthFromSession();
+        if (role === "student") {
+          navigate("/student");
+        } else if (role === "admin") {
+          navigate("/admin");
+        }
+      } catch (error) {
+        setErrorMessage(error.message || "Login blocked: use your VIT student account.");
+      }
+    };
 
-    const role = login(email, password);
+    restoreSession();
+  }, [navigate]);
 
-    if (role === "student") {
-      navigate("/student");
-    }
-    else if (role === "admin") {
-      navigate("/admin");
-    }
-    else {
-      alert("Invalid Credentials");
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setErrorMessage("");
+
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setErrorMessage(error.message || "Google login failed. Please try again.");
+      setLoading(false);
     }
   };
 
@@ -33,30 +46,14 @@ function Login() {
 
         <h2>Smart Campus System</h2>
 
-        <input
-          type="email"
-          placeholder="Email"
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
-        />
-
-        <button onClick={handleLogin}>
-          Login
+        <button onClick={handleGoogleLogin} disabled={loading}>
+          {loading ? "Redirecting..." : "Continue with Google"}
         </button>
 
+        {errorMessage && <div className="login-error">{errorMessage}</div>}
+
         <div className="login-info">
-          Student: student@campus.com / 1234
-          <br />
-          Admin: admin@campus.com / 1234
+          Use your <strong>@vitstudent.ac.in</strong> Google account.
         </div>
 
       </div>
