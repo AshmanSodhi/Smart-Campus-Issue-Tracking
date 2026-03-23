@@ -3,16 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 // Initialize Supabase client
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const ALLOWED_GOOGLE_DOMAIN = (import.meta.env.VITE_ALLOWED_GOOGLE_DOMAIN || "vitstudent.ac.in").toLowerCase();
-const ENABLE_TEST_EMAIL_LOGIN = String(import.meta.env.VITE_ENABLE_TEST_EMAIL_LOGIN || "false") === "true";
-const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
-const TECHNICIAN_EMAILS = (import.meta.env.VITE_TECHNICIAN_EMAILS || "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
 
 console.log("[Supabase Init] URL:", SUPABASE_URL);
 console.log("[Supabase Init] Key exists:", !!SUPABASE_ANON_KEY);
@@ -31,20 +21,68 @@ function clearLocalAuth() {
   localStorage.removeItem("userEmail");
 }
 
-function getRoleFromEmail(email) {
-  const normalized = email.toLowerCase();
-  if (ADMIN_EMAILS.includes(normalized)) {
-    return "admin";
+function normalizeRole(role) {
+  if (role === "admin" || role === "technician" || role === "student") {
+    return role;
   }
-  if (TECHNICIAN_EMAILS.includes(normalized)) {
-    return "technician";
-  }
-  return "student";
+  return null;
 }
 
-function isPrivilegedRoleEmail(email) {
-  const normalized = email.toLowerCase();
-  return ADMIN_EMAILS.includes(normalized) || TECHNICIAN_EMAILS.includes(normalized);
+async function getRoleFromDatabase(email) {
+  try {
+    const normalized = (email || "").toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("email", normalized)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01") {
+        return null;
+      }
+      console.error("Error fetching role from user_roles:", error);
+      return null;
+    }
+
+    return normalizeRole((data?.role || "").toLowerCase());
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
+
+async function upsertUserRole(email, role) {
+  const normalizedEmail = (email || "").toLowerCase();
+  const normalizedRole = normalizeRole((role || "").toLowerCase());
+
+  if (!normalizedEmail || !normalizedRole) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("user_roles").upsert(
+      [
+        {
+          email: normalizedEmail,
+          role: normalizedRole,
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      { onConflict: "email" }
+    );
+
+    if (error && error.code !== "42P01") {
+      console.error("Error upserting user role:", error);
+    }
+  } catch (err) {
+    console.error("Error:", err);
+  }
 }
 
 async function isApprovedTechnicianEmail(email) {
@@ -78,32 +116,23 @@ async function resolveRoleByEmail(email) {
     return null;
   }
 
-  if (ADMIN_EMAILS.includes(normalized)) {
-    return "admin";
-  }
-
-  if (TECHNICIAN_EMAILS.includes(normalized)) {
-    return "technician";
+  const dbRole = await getRoleFromDatabase(normalized);
+  if (dbRole) {
+    return dbRole;
   }
 
   if (await isApprovedTechnicianEmail(normalized)) {
+    await upsertUserRole(normalized, "technician");
     return "technician";
   }
 
-  if (isAllowedStudentDomain(normalized)) {
-    return "student";
-  }
-
-  return null;
+  await upsertUserRole(normalized, "student");
+  return "student";
 }
 
 async function isAllowedGoogleAccount(email) {
   const role = await resolveRoleByEmail(email);
   return role === "student" || role === "admin" || role === "technician";
-}
-
-function isAllowedStudentDomain(email) {
-  return email.toLowerCase().endsWith(`@${ALLOWED_GOOGLE_DOMAIN}`);
 }
 
 export async function signInWithGoogle() {
@@ -112,7 +141,6 @@ export async function signInWithGoogle() {
     options: {
       redirectTo: window.location.origin,
       queryParams: {
-        hd: ALLOWED_GOOGLE_DOMAIN,
         prompt: "select_account",
       },
     },
@@ -124,35 +152,45 @@ export async function signInWithGoogle() {
   }
 }
 
-export function isTestEmailLoginEnabled() {
-  return ENABLE_TEST_EMAIL_LOGIN;
-}
-
-export async function loginWithEmailForTesting(emailInput) {
-  if (!ENABLE_TEST_EMAIL_LOGIN) {
-    throw new Error("Test email login is disabled.");
-  }
-
+export async function loginWithEmailAndPassword(emailInput, passwordInput) {
   const email = (emailInput || "").trim().toLowerCase();
+  const password = passwordInput || "";
+
   if (!email) {
     throw new Error("Email is required.");
   }
 
-  const role = await resolveRoleByEmail(email);
+  if (!password) {
+    throw new Error("Password is required.");
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    console.error("[Auth] Email/password sign-in failed:", error);
+    throw new Error(error.message || "Email/password login failed.");
+  }
+
+  const sessionEmail = (data?.user?.email || email).toLowerCase();
+  const role = await resolveRoleByEmail(sessionEmail);
+
   if (!role) {
-    throw new Error("Only approved student/admin/technician accounts are allowed.");
+    await supabase.auth.signOut();
+    clearLocalAuth();
+    throw new Error("Unable to resolve your role. Contact admin.");
   }
 
   if (role === "student") {
+    await supabase.auth.signOut();
+    clearLocalAuth();
     throw new Error("Students can only login with Google OAuth.");
   }
 
-  if (!isPrivilegedRoleEmail(email) && role !== "technician") {
-    throw new Error("Email login is only allowed for configured admin or technician accounts.");
-  }
-
   localStorage.setItem("userRole", role);
-  localStorage.setItem("userEmail", email);
+  localStorage.setItem("userEmail", sessionEmail);
   return role;
 }
 
@@ -174,10 +212,10 @@ export async function initializeAuthFromSession() {
   }
 
   if (!(await isAllowedGoogleAccount(email))) {
-    console.error("[Auth] Email domain not allowed:", email);
+    console.error("[Auth] No valid role mapping found for email:", email);
     await supabase.auth.signOut();
     clearLocalAuth();
-    throw new Error(`Only @${ALLOWED_GOOGLE_DOMAIN} students or configured admin/technician accounts are allowed.`);
+    throw new Error("Unable to resolve a valid role for this account.");
   }
 
   const role = await resolveRoleByEmail(email);
@@ -208,12 +246,20 @@ export function getCurrentUserProfile() {
   return { email, role };
 }
 
-export function getTechnicianDirectory() {
-  return TECHNICIAN_EMAILS;
-}
-
 export async function getAssignableTechnicians() {
-  const configured = [...TECHNICIAN_EMAILS];
+  let dbMapped = [];
+
+  try {
+    const { data, error } = await supabase.from("user_roles").select("email").eq("role", "technician");
+
+    if (!error) {
+      dbMapped = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
+    } else if (error.code !== "42P01") {
+      console.error("Error fetching technician roles:", error);
+    }
+  } catch (err) {
+    console.error("Error:", err);
+  }
 
   try {
     const { data, error } = await supabase
@@ -223,17 +269,17 @@ export async function getAssignableTechnicians() {
 
     if (error) {
       if (error.code === "42P01") {
-        return configured;
+        return Array.from(new Set([...dbMapped]));
       }
       console.error("Error fetching approved technicians:", error);
-      return configured;
+      return Array.from(new Set([...dbMapped]));
     }
 
     const approved = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
-    return Array.from(new Set([...configured, ...approved]));
+    return Array.from(new Set([...dbMapped, ...approved]));
   } catch (err) {
     console.error("Error:", err);
-    return configured;
+    return Array.from(new Set([...dbMapped]));
   }
 }
 
@@ -337,6 +383,10 @@ export async function reviewTechnicianApplication(applicationId, approve, review
     }
 
     if (data?.email) {
+      if (approve) {
+        await upsertUserRole(data.email, "technician");
+      }
+
       await createNotificationForEmail(data.email, {
         title: `Technician application ${status}`,
         message: approve
@@ -790,10 +840,24 @@ async function createNotificationForEmail(recipientEmail, notification) {
 }
 
 async function createNotificationForRole(role, notification) {
-  const recipients = role === "admin" ? ADMIN_EMAILS : TECHNICIAN_EMAILS;
-  await Promise.all(
-    recipients.map((recipientEmail) => createNotificationForEmail(recipientEmail, notification))
-  );
+  try {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("email")
+      .eq("role", role);
+      
+    if (error) {
+      console.error("Error fetching users by role:", error);
+      return;
+    }
+    
+    const recipients = (data || []).map(r => r.email).filter(Boolean);
+    await Promise.all(
+      recipients.map((recipientEmail) => createNotificationForEmail(recipientEmail, notification))
+    );
+  } catch (err) {
+    console.error("Error fetching recipients:", err);
+  }
 }
 
 export { supabase };
@@ -853,4 +917,43 @@ export async function checkSetup() {
   console.log("   userRole:", localStorage.getItem("userRole"));
 
   console.log("\nDiagnostic complete\n");
+}
+
+export async function getAllUserRoles() {
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('*')
+      .order('role', { ascending: true })
+      .order('email', { ascending: true });
+      
+    if (error) {
+      if (error.code === '42P01') return [];
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching user roles:', err);
+    return [];
+  }
+}
+
+export async function adminUpsertUserRole(email, role) {
+  const normalizedEmail = (email || '').toLowerCase();
+  const normalizedRole = normalizeRole((role || '').toLowerCase());
+  
+  if (!normalizedEmail || !normalizedRole) throw new Error('Invalid email or role');
+  
+  const { data, error } = await supabase.from('user_roles').upsert([{ email: normalizedEmail, role: normalizedRole, updated_at: new Date().toISOString() }], { onConflict: 'email' }).select();
+  if (error) throw error;
+  return data;
+}
+
+export async function adminDeleteUserRole(email) {
+  const normalizedEmail = (email || '').toLowerCase();
+  if (!normalizedEmail) throw new Error('Invalid email');
+  
+  const { error } = await supabase.from('user_roles').delete().eq('email', normalizedEmail);
+  if (error) throw error;
+  return true;
 }

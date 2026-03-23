@@ -35,7 +35,6 @@
    ```
    VITE_SUPABASE_URL=https://your-project.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key-here
-   VITE_ALLOWED_GOOGLE_DOMAIN=vitstudent.ac.in
    VITE_ADMIN_EMAILS=admin1@vitstudent.ac.in,admin2@vitstudent.ac.in
    VITE_TECHNICIAN_EMAILS=tech1@vitstudent.ac.in,tech2@vitstudent.ac.in
    ```
@@ -57,16 +56,17 @@ If you already created tables earlier, run the optional ALTER statements at the 
    - `http://localhost:5173`
 5. In Google Cloud Console OAuth client config, add the same redirect URL
 
-## Step 6: Restrict Login Domain
-- App allows only `@vitstudent.ac.in` logins
-- Users outside this domain are signed out automatically
-- Admin access is controlled through `VITE_ADMIN_EMAILS`
+## Step 6: Configure Role Assignment
+- Roles are resolved from the `user_roles` database table (`student`, `admin`, `technician`)
+- Any email can sign in; access is based on mapped role in database
+- Approved technician applications are promoted to `technician` role automatically
+- `VITE_ADMIN_EMAILS` and `VITE_TECHNICIAN_EMAILS` are optional bootstrap fallbacks
 
 ## Step 7: Test Connection
 1. Save `.env.local`
 2. In terminal: `npm run dev`
 3. Click **Continue with Google**
-4. Sign in using a `@vitstudent.ac.in` account
+4. Sign in using any email account and verify the expected role routing
 
 ## Technician List (for AdminDashboard)
 The admin can assign issues to:
