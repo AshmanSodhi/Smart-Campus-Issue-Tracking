@@ -1,9 +1,12 @@
 // Shared configuration to eliminate inline literals and reduce mismatch bugs
 
 export const APP_CONFIG = {
+  // App name
+  APP_NAME: "Government Issue Tracking System",
+  
   // Default values
   DEFAULT_NOT_ASSIGNED: "Not Assigned",
-  DEFAULT_ROLE: "student",
+  DEFAULT_ROLE: "citizen",
   
   // Status values
   ISSUE_STATUSES: {
@@ -16,9 +19,16 @@ export const APP_CONFIG = {
 
   // Role values
   ROLES: {
-    STUDENT: "student",
+    CITIZEN: "citizen",
     ADMIN: "admin",
-    TECHNICIAN: "technician",
+    OFFICER: "officer",
+  },
+  
+  // Role display names
+  ROLE_NAMES: {
+    citizen: "Citizen",
+    admin: "Administrator",
+    officer: "Government Officer",
   },
 
   // Technician application statuses

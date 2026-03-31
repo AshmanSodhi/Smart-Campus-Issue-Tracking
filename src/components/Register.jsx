@@ -53,9 +53,9 @@ function Register() {
   return (
     <div className="register-container">
       <div className="register-box">
-        <h1>Technician Registration</h1>
+        <h1>Government Officer Registration</h1>
         <p className="register-subtitle">
-          Apply for technician access to help manage campus issues
+          Apply for government officer access to help manage public issues
         </p>
 
         {error && <div className="error-message">{error}</div>}
@@ -115,14 +115,14 @@ function Register() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="reason">Why do you want technician access? *</label>
+            <label htmlFor="reason">Why do you want government officer access? *</label>
             <textarea
               id="reason"
               name="reason"
               value={formData.reason}
               onChange={handleChange}
               required
-              placeholder="Describe your role and why you need technician access..."
+              placeholder="Describe your role and why you need government officer access..."
               rows="4"
             />
           </div>

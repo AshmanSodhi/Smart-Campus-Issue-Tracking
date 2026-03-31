@@ -478,11 +478,14 @@ export async function getStudentIssues() {
     }
 
     return data || [];
-  } catch (err) {
-    console.error("Error:", err);
+  } catch (error) {
+    console.error("Error fetching student issues:", error);
     return [];
   }
 }
+
+// Alias for government system terminology
+export const getCitizenIssues = getStudentIssues;
 
 export async function getAllIssues(filters = {}) {
   try {
@@ -539,11 +542,14 @@ export async function getTechnicianIssues() {
     }
 
     return data || [];
-  } catch (err) {
-    console.error("Error:", err);
+  } catch (error) {
+    console.error("Error fetching technician issues:", error);
     return [];
   }
 }
+
+// Alias for government system terminology
+export const getOfficerIssues = getTechnicianIssues;
 
 export async function updateIssueStatus(issueId, status, completionNote = null) {
   try {

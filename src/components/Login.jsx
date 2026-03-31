@@ -30,12 +30,12 @@ function Login() {
     const restoreSession = async () => {
       try {
         const role = await initializeAuthFromSession();
-        if (role === "student") {
-          navigate("/student");
+        if (role === "citizen") {
+          navigate("/citizen");
         } else if (role === "admin") {
           navigate("/admin");
-        } else if (role === "technician") {
-          navigate("/technician");
+        } else if (role === "officer") {
+          navigate("/officer");
         }
       } catch (error) {
         setErrorMessage(error.message || "Login blocked: use your VIT student account.");
@@ -61,12 +61,12 @@ function Login() {
     setErrorMessage("");
     try {
       const role = await loginWithEmailAndPassword(emailLoginInput, adminPassword);
-      if (role === "student") {
-        navigate("/student");
+      if (role === "citizen") {
+        navigate("/citizen");
       } else if (role === "admin") {
         navigate("/admin");
-      } else if (role === "technician") {
-        navigate("/technician");
+      } else if (role === "officer") {
+        navigate("/officer");
       }
     } catch (error) {
       setErrorMessage(error.message || "Email/password login failed.");
@@ -87,7 +87,7 @@ function Login() {
 
     try {
       await submitTechnicianApplication(techForm);
-      setRegistrationMessage("Application submitted. Admin approval is required before technician login.");
+      setRegistrationMessage("Application submitted. Admin approval is required before Government Officer login.");
       setTechForm({
         fullName: "",
         email: "",
@@ -96,7 +96,7 @@ function Login() {
         reason: "",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Technician registration failed.");
+      setErrorMessage(error.message || "Government Officer registration failed.");
     } finally {
       setRegistrationLoading(false);
     }
@@ -114,7 +114,7 @@ function Login() {
           </p>
           <div className="showcase-points">
             <span>Live status timeline</span>
-            <span>Student, Admin, Technician dashboards</span>
+            <span>Citizen, Admin, Government Officer dashboards</span>
             <span>Image-backed issue evidence</span>
           </div>
         </section>
@@ -122,13 +122,13 @@ function Login() {
         <section className="login-card" aria-label="Sign in to Smart Campus">
           <h2>Welcome Back</h2>
           <p className="login-subtitle">
-            Students must use Google OAuth. Admin and Technician can login with email and password.
+            Citizens must use Google OAuth. Admin and Government Officers can login with email and password.
           </p>
 
           <div className="portal-roles" aria-label="Portal role options">
-            <span>Student</span>
+            <span>Citizen</span>
             <span>Admin</span>
-            <span>Technician</span>
+            <span>Government Officer</span>
           </div>
 
           <button onClick={handleGoogleLogin} disabled={loading}>
@@ -138,7 +138,7 @@ function Login() {
           <div className="login-divider">or</div>
           <input
             type="email"
-            placeholder="Admin/Technician email"
+            placeholder="Admin/Government Officer email"
             value={emailLoginInput}
             onChange={(e) => setTestEmail(e.target.value)}
           />
@@ -160,7 +160,7 @@ function Login() {
             onClick={() => setShowTechRegistration((prev) => !prev)}
             disabled={registrationLoading || loading}
           >
-            {showTechRegistration ? "Hide Technician Registration" : "Apply for Technician Access"}
+            {showTechRegistration ? "Hide Government Officer Registration" : "Apply for Government Officer Access"}
           </button>
 
           {showTechRegistration && (

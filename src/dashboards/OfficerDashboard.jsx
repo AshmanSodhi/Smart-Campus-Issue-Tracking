@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getIssueImages,
-  getTechnicianIssues,
+  getOfficerIssues,
   getNotifications,
   logout,
   markNotificationRead,
@@ -14,7 +14,7 @@ import {
 import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
 import "./admin.css";
 
-function TechnicianDashboard() {
+function OfficerDashboard() {
   const navigate = useNavigate();
   const [issues, setIssues] = useState([]);
   const [issueImages, setIssueImages] = useState({});
@@ -57,7 +57,7 @@ function TechnicianDashboard() {
 
   const loadIssues = async () => {
     setLoading(true);
-    const fetchedIssues = await getTechnicianIssues();
+    const fetchedIssues = await getOfficerIssues();
     setIssues(fetchedIssues);
 
     for (const issue of fetchedIssues) {
@@ -207,7 +207,7 @@ function TechnicianDashboard() {
   return (
     <div className="dashboard-container">
       <div className="sidebar">
-        <h2>Technician Console</h2>
+        <h2>Government Officer Console</h2>
         <button>Assigned Queue</button>
         <button
           onClick={async () => {
@@ -223,7 +223,7 @@ function TechnicianDashboard() {
         <div className="header">
           <div>
             <p className="breadcrumbs">Home / Technician / Assigned Issues</p>
-            <h1>Technician Dashboard</h1>
+            <h1>Government Officer Dashboard</h1>
             <p className="helper-text">Submit your work with optional completion images and request more info when needed.</p>
           </div>
           <div className="notification-bell-container" ref={notificationPanelRef}>
@@ -478,4 +478,4 @@ function TechnicianDashboard() {
   );
 }
 
-export default TechnicianDashboard;
+export default OfficerDashboard;

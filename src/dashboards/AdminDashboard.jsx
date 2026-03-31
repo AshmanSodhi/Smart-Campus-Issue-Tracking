@@ -38,11 +38,11 @@ function AdminDashboard() {
   const [lastStatusChange, setLastStatusChange] = useState(null);
 
   const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserRole, setNewUserRole] = useState(APP_CONFIG.ROLES.STUDENT);
+  const [newUserRole, setNewUserRole] = useState(APP_CONFIG.ROLES.CITIZEN);
 
   const [filters, setFilters] = useState({
     status: "All",
-    technician: "All",
+    officer: "All",
     category: "All",
     priority: "All",
   });
@@ -230,7 +230,7 @@ function AdminDashboard() {
           className={activeTab === "applications" ? "active-tab" : ""}
           onClick={() => setActiveTab("applications")}
         >
-          Technician Applications {pendingApplications.length > 0 ? `(${pendingApplications.length})` : ""}
+          Government Officer Applications {pendingApplications.length > 0 ? `(${pendingApplications.length})` : ""}
         </button>
         <button
           className={activeTab === "database" ? "active-tab" : ""}

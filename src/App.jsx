@@ -3,9 +3,9 @@ import { useEffect } from "react";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
-import StudentDashboard from "./dashboards/StudentDashboard";
+import CitizenDashboard from "./dashboards/CitizenDashboard";
 import AdminDashboard from "./dashboards/AdminDashboard";
-import TechnicianDashboard from "./dashboards/TechnicianDashboard";
+import OfficerDashboard from "./dashboards/OfficerDashboard";
 import { autoCloseResolvedIssues } from "./services/supabaseService";
 
 function App() {
@@ -20,10 +20,10 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
-          path="/student"
+          path="/citizen"
           element={(
-            <ProtectedRoute allowedRoles={["student"]}>
-              <StudentDashboard />
+            <ProtectedRoute allowedRoles={["citizen"]}>
+              <CitizenDashboard />
             </ProtectedRoute>
           )}
         />
@@ -36,10 +36,10 @@ function App() {
           )}
         />
         <Route
-          path="/technician"
+          path="/officer"
           element={(
-            <ProtectedRoute allowedRoles={["technician"]}>
-              <TechnicianDashboard />
+            <ProtectedRoute allowedRoles={["officer"]}>
+              <OfficerDashboard />
             </ProtectedRoute>
           )}
         />

@@ -4,7 +4,7 @@ import {
   confirmResolution,
   getIssueImages,
   getNotifications,
-  getStudentIssues,
+  getCitizenIssues,
   logout,
   markNotificationRead,
   saveImageReference,
@@ -14,9 +14,9 @@ import {
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
 import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
-import "./student.css";
+import "./citizen.css";
 
-function StudentDashboard() {
+function CitizenDashboard() {
   const navigate = useNavigate();
 
   const [issues, setIssues] = useState([]);
@@ -75,7 +75,7 @@ function StudentDashboard() {
     setLoading(true);
     await autoCloseResolvedIssues();
 
-    const fetchedIssues = await getStudentIssues();
+    const fetchedIssues = await getCitizenIssues();
     setIssues(fetchedIssues);
 
     for (const issue of fetchedIssues) {
@@ -269,7 +269,7 @@ function StudentDashboard() {
         <div className="header">
           <div>
             <p className="breadcrumbs">Home / Student / Dashboard</p>
-            <h1>Student Dashboard</h1>
+            <h1>Citizen Dashboard</h1>
             <p className="helper-text">Shortcut: press Alt + N to jump to the new issue form.</p>
           </div>
           <div className="notification-bell-container" ref={notificationPanelRef}>
@@ -536,4 +536,4 @@ function StudentDashboard() {
   );
 }
 
-export default StudentDashboard;
+export default CitizenDashboard;
