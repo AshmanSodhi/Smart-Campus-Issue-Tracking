@@ -347,6 +347,8 @@ function OfficerDashboard() {
                     </td>
                     <td>
                       <select
+                        id={`statusSelect-${issue.id}`}
+                        name={`statusSelect-${issue.id}`}
                         value={issue.status}
                         onChange={(e) => handleStatusChange(issue, e.target.value)}
                         disabled={loading || issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED}
@@ -378,6 +380,8 @@ function OfficerDashboard() {
             <p>Describe the work you've completed and optionally upload a photo.</p>
             <div className="form">
               <textarea
+                id="workCompletionDescription"
+                name="workCompletionDescription"
                 placeholder="Describe the work completed..."
                 value={submissionForms[showSubmissionModal]?.description || ""}
                 onChange={(e) =>
@@ -391,8 +395,10 @@ function OfficerDashboard() {
               />
 
               <div className="image-upload-section">
-                <label>Upload Completion Photo (Optional):</label>
+                <label htmlFor="workCompletionImage">Upload Completion Photo (Optional):</label>
                 <input
+                  id="workCompletionImage"
+                  name="workCompletionImage"
                   type="file"
                   accept="image/*"
                   onChange={(e) => handleSubmissionImageSelect(e, showSubmissionModal)}
@@ -434,6 +440,8 @@ function OfficerDashboard() {
             <p>Specify what additional information or photos you need from the student.</p>
             <div className="form">
               <textarea
+                id="moreInfoRequest"
+                name="moreInfoRequest"
                 placeholder="What information do you need from the student?"
                 value={moreInfoForms[showMoreInfoModal]?.request || ""}
                 onChange={(e) =>

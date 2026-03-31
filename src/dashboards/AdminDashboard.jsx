@@ -324,6 +324,8 @@ function AdminDashboard() {
               <h3>Filters</h3>
               <div className="filters-row">
                 <select
+                  id="filterStatus"
+                  name="filterStatus"
                   ref={statusFilterRef}
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
@@ -336,6 +338,8 @@ function AdminDashboard() {
                 </select>
 
                 <select
+                  id="filterTechnician"
+                  name="filterTechnician"
                   value={filters.technician}
                   onChange={(e) => setFilters((prev) => ({ ...prev, technician: e.target.value }))}
                   aria-label="Filter by technician"
@@ -347,6 +351,8 @@ function AdminDashboard() {
                 </select>
 
                 <select
+                  id="filterCategory"
+                  name="filterCategory"
                   value={filters.category}
                   onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
                   aria-label="Filter by category"
@@ -358,6 +364,8 @@ function AdminDashboard() {
                 </select>
 
                 <select
+                  id="filterPriority"
+                  name="filterPriority"
                   value={filters.priority}
                   onChange={(e) => setFilters((prev) => ({ ...prev, priority: e.target.value }))}
                   aria-label="Filter by priority"
@@ -426,6 +434,8 @@ function AdminDashboard() {
                         </td>
                         <td>
                           <select
+                            id={`assignTechnician-${issue.id}`}
+                            name={`assignTechnician-${issue.id}`}
                             value={issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
                             onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
                             disabled={loading}
@@ -437,6 +447,8 @@ function AdminDashboard() {
                         </td>
                         <td>
                           <select
+                            id={`changeStatus-${issue.id}`}
+                            name={`changeStatus-${issue.id}`}
                             value={issue.status}
                             onChange={(e) => updateStatus(issue.id, e.target.value)}
                             disabled={loading}
@@ -519,13 +531,15 @@ function AdminDashboard() {
               <form onSubmit={handleAddOrUpdateRole}>
                 <div className="filters-row">
                   <input
+                    id="newUserEmail"
+                    name="newUserEmail"
                     type="email"
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
                     placeholder="user@college.edu"
                     required
                   />
-                  <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
+                  <select id="newUserRole" name="newUserRole" value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
                     <option value={APP_CONFIG.ROLES.STUDENT}>student</option>
                     <option value={APP_CONFIG.ROLES.TECHNICIAN}>technician</option>
                     <option value={APP_CONFIG.ROLES.ADMIN}>admin</option>

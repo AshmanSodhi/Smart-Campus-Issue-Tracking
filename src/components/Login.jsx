@@ -137,12 +137,16 @@ function Login() {
 
           <div className="login-divider">or</div>
           <input
+            id="emailLoginInput"
+            name="emailLoginInput"
             type="email"
             placeholder="Admin/Government Officer email"
             value={emailLoginInput}
             onChange={(e) => setTestEmail(e.target.value)}
           />
           <input
+            id="adminPassword"
+            name="adminPassword"
             type="password"
             placeholder="Password"
             value={adminPassword}
@@ -169,30 +173,40 @@ function Login() {
               <p>Submit your details. Admin approval is required before technician login access is enabled.</p>
 
               <input
+                id="techFormFullName"
+                name="techFormFullName"
                 placeholder="Full Name"
                 value={techForm.fullName}
                 onChange={(e) => updateTechField("fullName", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormEmail"
+                name="techFormEmail"
                 placeholder="Email"
                 value={techForm.email}
                 onChange={(e) => updateTechField("email", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormDepartment"
+                name="techFormDepartment"
                 placeholder="Department"
                 value={techForm.department}
                 onChange={(e) => updateTechField("department", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormPhone"
+                name="techFormPhone"
                 placeholder="Phone Number"
                 value={techForm.phone}
                 onChange={(e) => updateTechField("phone", e.target.value)}
                 disabled={registrationLoading}
               />
               <textarea
+                id="techFormReason"
+                name="techFormReason"
                 placeholder="Why do you need technician access?"
                 value={techForm.reason}
                 onChange={(e) => updateTechField("reason", e.target.value)}

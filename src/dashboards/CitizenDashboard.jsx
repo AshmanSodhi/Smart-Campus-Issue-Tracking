@@ -336,6 +336,8 @@ function CitizenDashboard() {
           <h3>Raise New Issue</h3>
           <div className="form">
             <input
+              id="issueTitle"
+              name="issueTitle"
               ref={titleInputRef}
               placeholder="Issue Title"
               value={title}
@@ -344,6 +346,8 @@ function CitizenDashboard() {
             />
 
             <textarea
+              id="issueDescription"
+              name="issueDescription"
               placeholder="Description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -351,13 +355,15 @@ function CitizenDashboard() {
             />
 
             <input
+              id="issueLocation"
+              name="issueLocation"
               placeholder="Location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               disabled={loading}
             />
 
-            <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={loading}>
+            <select id="issueCategory" name="issueCategory" value={category} onChange={(e) => setCategory(e.target.value)} disabled={loading}>
               <option value="">Category</option>
               {Object.values(APP_CONFIG.CATEGORIES).map((cat) => (
                 <option key={cat} value={cat}>
@@ -366,7 +372,7 @@ function CitizenDashboard() {
               ))}
             </select>
 
-            <select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={loading}>
+            <select id="issuePriority" name="issuePriority" value={priority} onChange={(e) => setPriority(e.target.value)} disabled={loading}>
               {Object.values(APP_CONFIG.PRIORITIES).map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -375,8 +381,8 @@ function CitizenDashboard() {
             </select>
 
             <div className="image-upload-section">
-              <label>Upload Image (Optional):</label>
-              <input type="file" accept="image/*" onChange={handleImageSelect} disabled={loading} />
+              <label htmlFor="issueImage">Upload Image (Optional):</label>
+              <input id="issueImage" name="issueImage" type="file" accept="image/*" onChange={handleImageSelect} disabled={loading} />
 
               {previewImage && (
                 <div className="image-preview">
