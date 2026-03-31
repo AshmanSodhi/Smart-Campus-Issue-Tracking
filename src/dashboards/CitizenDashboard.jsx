@@ -253,7 +253,7 @@ function CitizenDashboard() {
   return (
     <div className="dashboard-container">
       <div className="sidebar">
-        <h2>Student Console</h2>
+        <h2>Citizen Dashboard</h2>
         <button>My Dashboard</button>
         <button
           onClick={async () => {
@@ -268,7 +268,7 @@ function CitizenDashboard() {
       <div className="main-content">
         <div className="header">
           <div>
-            <p className="breadcrumbs">Home / Student / Dashboard</p>
+            <p className="breadcrumbs">Home / Citizen / Dashboard</p>
             <h1>Citizen Dashboard</h1>
             <p className="helper-text">Shortcut: press Alt + N to jump to the new issue form.</p>
           </div>
@@ -311,7 +311,7 @@ function CitizenDashboard() {
           </div>
         </div>
 
-        <div className="metrics-row" aria-label="Student summary">
+        <div className="metrics-row" aria-label="Citizen summary">
           <article className="metric-card">
             <p>Total Issues</p>
             <strong>{issues.length}</strong>
@@ -414,10 +414,10 @@ function CitizenDashboard() {
                   <th>Priority</th>
                   <th>Location</th>
                   <th>Status</th>
-                  <th>Technician</th>
+                  <th>Assigned Officer</th>
                   <th>Created</th>
                   <th>Images</th>
-                  <th>Student Action</th>
+                  <th>Citizen Action</th>
                 </tr>
               </thead>
 

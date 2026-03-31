@@ -38,7 +38,7 @@ function Login() {
           navigate("/officer");
         }
       } catch (error) {
-        setErrorMessage(error.message || "Login blocked: use your VIT student account.");
+        setErrorMessage(error.message || "Login blocked: please use your government account.");
       }
     };
 
@@ -109,7 +109,7 @@ function Login() {
           <p className="showcase-kicker">Government Issue Tracking</p>
           <h1>Issue Tracking and Resolution Hub</h1>
           <p>
-            Report issues, follow progress, and collaborate with your campus operations teams
+            Report issues, follow progress, and collaborate with government agencies
             from one workspace.
           </p>
           <div className="showcase-points">
@@ -169,8 +169,8 @@ function Login() {
 
           {showTechRegistration && (
             <div className="tech-registration-panel">
-              <h3>Technician Registration</h3>
-              <p>Submit your details. Admin approval is required before technician login access is enabled.</p>
+              <h3>Government Officer Registration</h3>
+              <p>Submit your details. Admin approval is required before officer login access is enabled.</p>
 
               <input
                 id="techFormFullName"
@@ -207,7 +207,7 @@ function Login() {
               <textarea
                 id="techFormReason"
                 name="techFormReason"
-                placeholder="Why do you need technician access?"
+                placeholder="Why do you need officer access?"
                 value={techForm.reason}
                 onChange={(e) => updateTechField("reason", e.target.value)}
                 disabled={registrationLoading}
@@ -223,10 +223,10 @@ function Login() {
           )}
 
           <div className="login-info">
-            Use Google for student access. Admin/technician access requires database role + password auth.
+            Use Google for citizen access. Admin/officer access requires database role + password auth.
             <br />
             <button className="link-btn"onClick={() => navigate("/register")}>
-              Apply for Technician Access (Dedicated Form)
+              Apply for Officer Access (Dedicated Form)
             </button>
           </div>
         </section>

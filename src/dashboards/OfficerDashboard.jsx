@@ -222,7 +222,7 @@ function OfficerDashboard() {
       <div className="main-content">
         <div className="header">
           <div>
-            <p className="breadcrumbs">Home / Technician / Assigned Issues</p>
+            <p className="breadcrumbs">Home / Officer / Assigned Issues</p>
             <h1>Government Officer Dashboard</h1>
             <p className="helper-text">Submit your work with optional completion images and request more info when needed.</p>
           </div>
@@ -265,7 +265,7 @@ function OfficerDashboard() {
           </div>
         </div>
 
-        <div className="metrics-row" aria-label="Technician summary">
+        <div className="metrics-row" aria-label="Officer summary">
           <article className="metric-card">
             <p>Assigned</p>
             <strong>{issues.length}</strong>
@@ -311,7 +311,7 @@ function OfficerDashboard() {
                   <th>Priority</th>
                   <th>Location</th>
                   <th>Status</th>
-                  <th>Student</th>
+                  <th>Citizen</th>
                   <th>Images</th>
                   <th>Actions</th>
                 </tr>
@@ -437,12 +437,12 @@ function OfficerDashboard() {
               X
             </button>
             <h3>Request More Information</h3>
-            <p>Specify what additional information or photos you need from the student.</p>
+            <p>Specify what additional information or photos you need from the citizen.</p>
             <div className="form">
               <textarea
                 id="moreInfoRequest"
                 name="moreInfoRequest"
-                placeholder="What information do you need from the student?"
+                placeholder="What information do you need from the citizen?"
                 value={moreInfoForms[showMoreInfoModal]?.request || ""}
                 onChange={(e) =>
                   setMoreInfoForms((prev) => ({

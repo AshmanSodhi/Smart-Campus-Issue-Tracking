@@ -24,8 +24,8 @@ export const ISSUE_CATEGORIES = {
 };
 
 export const USER_ROLES = {
-  STUDENT: "student",
-  TECHNICIAN: "technician",
+  CITIZEN: "citizen",
+  OFFICER: "officer",
   ADMIN: "admin",
 };
 
@@ -39,7 +39,7 @@ export const NOTIFICATION_TYPES = {
 };
 
 export const DEFAULT_NOT_ASSIGNED = "Not Assigned";
-export const DEFAULT_ROLE = USER_ROLES.STUDENT;
+export const DEFAULT_ROLE = USER_ROLES.CITIZEN;
 export const AUTO_CLOSE_DAYS = 7;
 
 export const STATUS_COLORS = {
