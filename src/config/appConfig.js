@@ -73,10 +73,10 @@ export const APP_CONFIG = {
 
   // Valid issue stage transitions
   ISSUE_TRANSITIONS: {
-    Pending: ["In Progress", "More Info Needed", "Resolved", "Closed"],
-    "In Progress": ["More Info Needed", "Resolved", "Closed", "Pending"],
-    "More Info Needed": ["In Progress", "Pending", "Resolved", "Closed"],
-    Resolved: ["Closed", "In Progress", "Pending"],
+    Pending: ["In Progress"],
+    "In Progress": ["More Info Needed", "Resolved"],
+    "More Info Needed": ["Resolved"],
+    Resolved: ["Closed"],
     Closed: [],
   },
 

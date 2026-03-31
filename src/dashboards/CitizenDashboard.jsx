@@ -211,14 +211,17 @@ function CitizenDashboard() {
         }
       }
 
-      if (infoText) {
-        await submitAdditionalInfo(issueId, infoText);
+      const result = await submitAdditionalInfo(issueId, infoText || null);
+      if (!result) {
+        setFeedback("Unable to submit additional information for this issue.");
+        setLoading(false);
+        return;
       }
 
       setAdditionalInfo((prev) => ({ ...prev, [issueId]: "" }));
       setAdditionalImages((prev) => ({ ...prev, [issueId]: null }));
       await loadDashboard();
-      setFeedback("Additional information submitted successfully.");
+      setFeedback("Additional information submitted. The issue is now marked as resolved.");
     } catch (error) {
       setFeedback(error.message || "Failed to submit additional information.");
     } finally {

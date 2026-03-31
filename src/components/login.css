@@ -5,9 +5,9 @@
   align-items: center;
   padding: clamp(16px, 3vw, 36px);
   background:
-    radial-gradient(circle at 10% 15%, rgba(30, 64, 175, 0.2), transparent 35%),
-    radial-gradient(circle at 92% 84%, rgba(2, 132, 199, 0.22), transparent 30%),
-    linear-gradient(140deg, #f4f8ff 0%, #e8f0ff 48%, #eef7ff 100%);
+    radial-gradient(circle at 10% 15%, rgba(21, 58, 110, 0.2), transparent 35%),
+    radial-gradient(circle at 92% 84%, rgba(15, 94, 94, 0.2), transparent 30%),
+    linear-gradient(140deg, #f2f6fb 0%, #e8eff8 48%, #f4f7fb 100%);
   font-family: "Segoe UI", "Tahoma", "Geneva", sans-serif;
 }
 
@@ -17,8 +17,8 @@
   border-radius: 24px;
   overflow: hidden;
   background: #ffffff;
-  border: 1px solid #d1dff8;
-  box-shadow: 0 24px 60px rgba(20, 55, 126, 0.18);
+  border: 1px solid #c7d6e9;
+  box-shadow: 0 24px 60px rgba(20, 47, 92, 0.18);
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
 }
@@ -31,10 +31,10 @@
   justify-content: center;
   gap: 18px;
   background:
-    linear-gradient(150deg, rgba(7, 25, 64, 0.76), rgba(7, 25, 64, 0.5)),
-    radial-gradient(circle at 20% 10%, rgba(96, 165, 250, 0.34), transparent 36%),
-    radial-gradient(circle at 85% 78%, rgba(56, 189, 248, 0.26), transparent 34%),
-    linear-gradient(145deg, #0f2f6d 0%, #1d4ed8 52%, #0e7490 100%);
+    linear-gradient(150deg, rgba(8, 30, 64, 0.82), rgba(8, 30, 64, 0.56)),
+    radial-gradient(circle at 18% 12%, rgba(200, 155, 44, 0.28), transparent 38%),
+    radial-gradient(circle at 85% 78%, rgba(15, 94, 94, 0.28), transparent 34%),
+    linear-gradient(145deg, #0f2f5f 0%, #1f4f8c 54%, #0f5e5e 100%);
 }
 
 .showcase-kicker {
@@ -43,7 +43,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #dbeafe;
+  color: #f7e5b8;
 }
 
 .showcase-brand {
@@ -67,6 +67,7 @@
   margin: 0;
   font-size: clamp(1.85rem, 3.2vw, 2.6rem);
   line-height: 1.16;
+  text-align: center;
 }
 
 .login-showcase p {

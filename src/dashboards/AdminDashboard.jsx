@@ -141,6 +141,10 @@ function AdminDashboard() {
     const currentIssue = issues.find((issue) => issue.id === id);
     const previousStatus = currentIssue?.status;
 
+    if (!currentIssue || newStatus === previousStatus) {
+      return;
+    }
+
     if (newStatus === APP_CONFIG.ISSUE_STATUSES.CLOSED && !window.confirm("Close this issue? You can undo this change.")) {
       return;
     }
@@ -152,7 +156,12 @@ function AdminDashboard() {
       }
 
       setLoading(true);
-      await requestMoreInfo(id, infoRequest.trim());
+      const result = await requestMoreInfo(id, infoRequest.trim());
+      if (!result) {
+        setFeedback(`Unable to request more information for issue #${id}.`);
+        setLoading(false);
+        return;
+      }
       await loadDashboard();
       if (previousStatus && previousStatus !== newStatus) {
         setLastStatusChange({ id, previousStatus });
@@ -163,7 +172,12 @@ function AdminDashboard() {
     }
 
     setLoading(true);
-    await updateIssueStatus(id, newStatus);
+    const result = await updateIssueStatus(id, newStatus);
+    if (!result) {
+      setFeedback(`Status change not allowed for issue #${id}.`);
+      setLoading(false);
+      return;
+    }
     await loadDashboard();
 
     if (previousStatus && previousStatus !== newStatus) {
@@ -189,7 +203,12 @@ function AdminDashboard() {
 
   const handleAssignTechnician = async (id, tech) => {
     setLoading(true);
-    await assignTechnician(id, tech);
+    const result = await assignTechnician(id, tech);
+    if (!result) {
+      setFeedback(`Technician change is not allowed for issue #${id}.`);
+      setLoading(false);
+      return;
+    }
     await loadDashboard();
     setFeedback(`Technician updated for issue #${id}.`);
     setLoading(false);
@@ -203,9 +222,20 @@ function AdminDashboard() {
   const handleReviewTechnician = async (applicationId, approve) => {
     setLoading(true);
     try {
-      await reviewTechnicianApplication(applicationId, approve);
+      const result = await reviewTechnicianApplication(applicationId, approve);
       await loadDashboard();
-      setFeedback(approve ? "Technician application approved." : "Technician application rejected.");
+
+      if (!approve) {
+        setFeedback("Technician application rejected.");
+      } else if (result?.passwordSetupEmailSent) {
+        setFeedback(
+          result?.accountCreatedNow
+            ? "Technician application approved and account created. Password setup email sent."
+            : "Technician application approved. Existing account detected and password setup email sent."
+        );
+      } else {
+        setFeedback("Technician application approved.");
+      }
     } catch (error) {
       setFeedback(error.message || "Unable to review technician application.");
     }
@@ -248,6 +278,18 @@ function AdminDashboard() {
 
   const getStatusClass = (status) => {
     return `status ${getStatusBadgeClass(status)}`;
+  };
+
+  const isAssignmentLocked = (status) => {
+    return (
+      status === APP_CONFIG.ISSUE_STATUSES.RESOLVED ||
+      status === APP_CONFIG.ISSUE_STATUSES.CLOSED
+    );
+  };
+
+  const getAllowedStatusOptions = (status) => {
+    const transitions = APP_CONFIG.ISSUE_TRANSITIONS[status] || [];
+    return [status, ...transitions.filter((nextStatus) => nextStatus !== status)];
   };
 
   return (
@@ -488,7 +530,7 @@ function AdminDashboard() {
                                 <select
                                   value={issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
                                   onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
-                                  disabled={loading}
+                                  disabled={loading || isAssignmentLocked(issue.status)}
                                 >
                                   {technicians.map((tech) => (
                                     <option key={tech}>{tech}</option>
@@ -501,7 +543,7 @@ function AdminDashboard() {
                                   onChange={(e) => updateStatus(issue.id, e.target.value)}
                                   disabled={loading}
                                 >
-                                  {Object.values(APP_CONFIG.ISSUE_STATUSES).map((status) => (
+                                  {getAllowedStatusOptions(issue.status).map((status) => (
                                     <option key={status}>{status}</option>
                                   ))}
                                 </select>

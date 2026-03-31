@@ -15,9 +15,25 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const provisioningClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
 const DB_ROLES = APP_CONFIG.DB_ROLES;
 const ISSUE_STATUSES = APP_CONFIG.ISSUE_STATUSES;
+const ASSIGNMENT_NOTIFICATION_TITLES = [
+  "Technician assigned",
+  "Technician assignment updated",
+  "Work started",
+  "New assigned issue",
+  "Issue reassigned",
+  "Issue unassigned",
+];
+const MORE_INFO_NOTIFICATION_TITLES = ["More information needed"];
 
 function getEmailDomain(email) {
   return ((email || "").split("@")[1] || "").toLowerCase();
@@ -40,6 +56,68 @@ function clearLocalAuth() {
 
 function normalizeRole(role) {
   return normalizeDatabaseRole(role);
+}
+
+function createTemporaryPassword(length = 18) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
+  let password = "";
+  for (let index = 0; index < length; index += 1) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+async function ensureTechnicianPasswordAccount(email) {
+  const normalizedEmail = (email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error("Technician email is required for account provisioning.");
+  }
+
+  const redirectTo = typeof window !== "undefined" ? window.location.origin : undefined;
+  let createdNow = false;
+
+  try {
+    const { data, error } = await provisioningClient.auth.signUp({
+      email: normalizedEmail,
+      password: createTemporaryPassword(),
+      options: {
+        emailRedirectTo: redirectTo,
+      },
+    });
+
+    if (error) {
+      const normalizedMessage = (error.message || "").toLowerCase();
+      const alreadyRegistered =
+        normalizedMessage.includes("already registered") ||
+        normalizedMessage.includes("user already") ||
+        error.status === 422;
+
+      if (!alreadyRegistered) {
+        throw error;
+      }
+    } else {
+      createdNow = Array.isArray(data?.user?.identities) && data.user.identities.length > 0;
+    }
+  } catch (error) {
+    console.error("Error provisioning technician auth account:", error);
+    throw new Error(error.message || "Failed to create technician account.");
+  }
+
+  try {
+    const { error } = await provisioningClient.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo,
+    });
+
+    if (error) {
+      console.error("Error sending password setup email:", error);
+      throw new Error(error.message || "Unable to send password setup email.");
+    }
+  } catch (error) {
+    console.error("Error triggering password setup email:", error);
+    throw new Error(error.message || "Unable to send password setup email.");
+  }
+
+  return { createdNow, passwordSetupEmailSent: true };
 }
 
 async function getRoleFromDatabase(email) {
@@ -388,6 +466,7 @@ export async function getTechnicianApplications(status = APP_CONFIG.TECH_APP_STA
 export async function reviewTechnicianApplication(applicationId, approve, reviewNote = "") {
   const adminEmail = getEmail() || DB_ROLES.ADMIN;
   const status = approve ? APP_CONFIG.TECH_APP_STATUS.APPROVED : APP_CONFIG.TECH_APP_STATUS.REJECTED;
+  let provisioningResult = null;
 
   try {
     const { data, error } = await supabase
@@ -412,18 +491,41 @@ export async function reviewTechnicianApplication(applicationId, approve, review
 
     if (data?.email) {
       if (approve) {
+        try {
+          provisioningResult = await ensureTechnicianPasswordAccount(data.email);
+        } catch (provisioningError) {
+          await supabase
+            .from("technician_applications")
+            .update({
+              status: APP_CONFIG.TECH_APP_STATUS.PENDING,
+              review_note: null,
+              reviewed_by: null,
+              reviewed_at: null,
+            })
+            .eq("id", applicationId);
+
+          throw new Error(
+            provisioningError.message ||
+              "Unable to provision account. Application was returned to pending."
+          );
+        }
+
         await upsertUserRole(data.email, DB_ROLES.TECHNICIAN);
       }
 
       await createNotificationForEmail(data.email, {
         title: `Technician application ${status}`,
         message: approve
-          ? "Your technician access request was approved. You can now login as technician."
+          ? "Your technician access request was approved. Check your email to set/reset your password before logging in."
           : `Your technician access request was rejected.${reviewNote ? ` Note: ${reviewNote}` : ""}`,
       });
     }
 
-    return data;
+    return {
+      ...data,
+      accountCreatedNow: provisioningResult?.createdNow || false,
+      passwordSetupEmailSent: provisioningResult?.passwordSetupEmailSent || false,
+    };
   } catch (err) {
     console.error("Error:", err);
     throw err;
@@ -582,6 +684,8 @@ export const getOfficerIssues = getTechnicianIssues;
 export async function updateIssueStatus(issueId, status, completionNote = null) {
   try {
     const targetStatus = status;
+    const actorRole = getRole();
+    const actorEmail = (getEmail() || "").toLowerCase();
     const { data: currentIssue, error: currentIssueError } = await supabase
       .from("issues")
       .select("student_email, technician, status")
@@ -590,6 +694,38 @@ export async function updateIssueStatus(issueId, status, completionNote = null) 
 
     if (currentIssueError) {
       console.error("Error fetching issue for status update:", currentIssueError);
+      return null;
+    }
+
+    const assignedTechnician = (currentIssue?.technician || "").toLowerCase();
+    const hasAssignedTechnician =
+      currentIssue?.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED;
+
+    if (actorRole === APP_CONFIG.ROLES.CITIZEN) {
+      console.error("Citizens cannot directly update issue status.");
+      return null;
+    }
+
+    if (actorRole === APP_CONFIG.ROLES.OFFICER) {
+      if (!actorEmail || !assignedTechnician || assignedTechnician !== actorEmail) {
+        console.error("Officers can only update issues assigned to them.");
+        return null;
+      }
+
+      const officerAllowedTargets = [ISSUE_STATUSES.MORE_INFO_NEEDED, ISSUE_STATUSES.RESOLVED];
+      if (targetStatus !== currentIssue.status && !officerAllowedTargets.includes(targetStatus)) {
+        console.error(`Officer status update not allowed: ${currentIssue.status} -> ${targetStatus}`);
+        return null;
+      }
+    }
+
+    if (targetStatus === ISSUE_STATUSES.MORE_INFO_NEEDED && !hasAssignedTechnician) {
+      console.error("Cannot request more info without an assigned technician.");
+      return null;
+    }
+
+    if (targetStatus === ISSUE_STATUSES.RESOLVED && !hasAssignedTechnician) {
+      console.error("Cannot resolve an issue without an assigned technician.");
       return null;
     }
 
@@ -615,6 +751,10 @@ export async function updateIssueStatus(issueId, status, completionNote = null) 
       updatePayload.closed_at = null;
     }
 
+    if (targetStatus !== ISSUE_STATUSES.MORE_INFO_NEEDED) {
+      updatePayload.more_info_request = null;
+    }
+
     if (targetStatus === ISSUE_STATUSES.CLOSED) {
       updatePayload.closed_at = new Date().toISOString();
     }
@@ -628,6 +768,14 @@ export async function updateIssueStatus(issueId, status, completionNote = null) 
     if (error) {
       console.error("Error updating status:", error);
       return null;
+    }
+
+    if (
+      currentIssue?.status === ISSUE_STATUSES.MORE_INFO_NEEDED &&
+      targetStatus !== ISSUE_STATUSES.MORE_INFO_NEEDED &&
+      currentIssue?.student_email
+    ) {
+      await deleteUnreadIssueNotifications(issueId, [currentIssue.student_email], MORE_INFO_NOTIFICATION_TITLES);
     }
 
     if (currentIssue?.student_email) {
@@ -659,19 +807,49 @@ export async function updateIssueStatus(issueId, status, completionNote = null) 
 
 export async function assignTechnician(issueId, technicianName) {
   try {
+    const actorRole = getRole();
+    if (actorRole !== APP_CONFIG.ROLES.ADMIN) {
+      console.error("Only admins can assign technicians.");
+      return null;
+    }
+
     const { data: currentIssue } = await supabase
       .from("issues")
-      .select("student_email, status")
+      .select("student_email, status, technician")
       .eq("id", issueId)
       .single();
 
+    if (!currentIssue) {
+      return null;
+    }
+
+    if (
+      currentIssue.status === ISSUE_STATUSES.RESOLVED ||
+      currentIssue.status === ISSUE_STATUSES.CLOSED
+    ) {
+      console.error("Cannot change technician after an issue is resolved or closed.");
+      return null;
+    }
+
     const assignedTechnician = (technicianName || APP_CONFIG.DEFAULT_NOT_ASSIGNED).trim();
+    const previousTechnician = (currentIssue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED).trim();
+
+    if (assignedTechnician === previousTechnician) {
+      return [currentIssue];
+    }
+
+    const cleanupRecipients = [currentIssue.student_email, previousTechnician, assignedTechnician].filter(
+      (value) => value && value !== APP_CONFIG.DEFAULT_NOT_ASSIGNED
+    );
+    await deleteUnreadIssueNotifications(issueId, cleanupRecipients, ASSIGNMENT_NOTIFICATION_TITLES);
+
     const shouldAutoStart =
       assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
       currentIssue?.status === ISSUE_STATUSES.PENDING;
     const shouldResetToPending =
       assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
-      currentIssue?.status === ISSUE_STATUSES.IN_PROGRESS;
+      (currentIssue?.status === ISSUE_STATUSES.IN_PROGRESS ||
+        currentIssue?.status === ISSUE_STATUSES.MORE_INFO_NEEDED);
 
     const updatePayload = {
       technician: assignedTechnician,
@@ -700,7 +878,7 @@ export async function assignTechnician(issueId, technicianName) {
     if (currentIssue?.student_email) {
       await createNotificationForEmail(currentIssue.student_email, {
         issueId,
-        title: "Technician assigned",
+        title: "Technician assignment updated",
         message:
           assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED
             ? `Issue #${issueId} is currently unassigned.`
@@ -716,7 +894,29 @@ export async function assignTechnician(issueId, technicianName) {
       }
     }
 
-    if (assignedTechnician && assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
+    if (
+      previousTechnician &&
+      previousTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
+      previousTechnician !== assignedTechnician
+    ) {
+      await createNotificationForEmail(previousTechnician, {
+        issueId,
+        title:
+          assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED
+            ? "Issue unassigned"
+            : "Issue reassigned",
+        message:
+          assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED
+            ? `Issue #${issueId} is no longer assigned to you.`
+            : `Issue #${issueId} was reassigned to ${assignedTechnician}.`,
+      });
+    }
+
+    if (
+      assignedTechnician &&
+      assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
+      assignedTechnician !== previousTechnician
+    ) {
       await createNotificationForEmail(assignedTechnician, {
         issueId,
         title: "New assigned issue",
@@ -931,6 +1131,58 @@ export async function getIssueImages(issueId) {
 
 // ============ NOTIFICATIONS ============
 
+async function deleteUnreadIssueNotifications(issueId, recipients = [], titles = []) {
+  if (!issueId) {
+    return;
+  }
+
+  const normalizedRecipients = recipients
+    .map((email) => (email || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  try {
+    if (normalizedRecipients.length > 0) {
+      await Promise.all(
+        normalizedRecipients.map(async (recipientEmail) => {
+          let query = supabase
+            .from("notifications")
+            .delete()
+            .eq("issue_id", issueId)
+            .eq("recipient_email", recipientEmail)
+            .eq("is_read", false);
+
+          if (titles.length > 0) {
+            query = query.in("title", titles);
+          }
+
+          const { error } = await query;
+          if (error && error.code !== "42P01") {
+            console.error("Error deleting notifications:", error);
+          }
+        })
+      );
+      return;
+    }
+
+    let query = supabase
+      .from("notifications")
+      .delete()
+      .eq("issue_id", issueId)
+      .eq("is_read", false);
+
+    if (titles.length > 0) {
+      query = query.in("title", titles);
+    }
+
+    const { error } = await query;
+    if (error && error.code !== "42P01") {
+      console.error("Error deleting notifications:", error);
+    }
+  } catch (err) {
+    console.error("Error deleting notifications:", err);
+  }
+}
+
 export async function getNotifications() {
   try {
     const email = getEmail();
@@ -1124,15 +1376,44 @@ export async function requestMoreInfo(issueId, infoRequest, technicianEmail = nu
   try {
     const { data: currentIssue } = await supabase
       .from("issues")
-      .select("student_email")
+      .select("student_email, status, technician")
       .eq("id", issueId)
       .single();
+
+    if (!currentIssue) {
+      return null;
+    }
+
+    const requesterEmail = (technicianEmail || getEmail() || "").toLowerCase();
+    const assignedTechnician = (currentIssue.technician || "").toLowerCase();
+    const actorRole = getRole();
+
+    if (
+      !assignedTechnician ||
+      currentIssue.technician === APP_CONFIG.DEFAULT_NOT_ASSIGNED ||
+      (actorRole !== APP_CONFIG.ROLES.ADMIN && requesterEmail !== assignedTechnician)
+    ) {
+      console.error("Only the assigned technician or admin can request more information.");
+      return null;
+    }
+
+    if (!isAllowedIssueTransition(currentIssue.status, ISSUE_STATUSES.MORE_INFO_NEEDED)) {
+      console.error(
+        `Invalid issue transition for more info: ${currentIssue.status} -> ${ISSUE_STATUSES.MORE_INFO_NEEDED}`
+      );
+      return null;
+    }
 
     const updatePayload = {
       status: ISSUE_STATUSES.MORE_INFO_NEEDED,
       more_info_request: infoRequest,
+      resolved_at: null,
       updated_at: new Date().toISOString(),
     };
+
+    if (currentIssue?.student_email) {
+      await deleteUnreadIssueNotifications(issueId, [currentIssue.student_email], MORE_INFO_NOTIFICATION_TITLES);
+    }
 
     const { data, error } = await supabase
       .from("issues")
@@ -1164,13 +1445,31 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
   try {
     const { data: currentIssue } = await supabase
       .from("issues")
-      .select("student_email, technician")
+      .select("student_email, technician, status")
       .eq("id", issueId)
       .single();
 
+    if (!currentIssue) {
+      return null;
+    }
+
+    const actorEmail = (getEmail() || "").toLowerCase();
+    const studentEmail = (currentIssue.student_email || "").toLowerCase();
+    if (!actorEmail || actorEmail !== studentEmail) {
+      console.error("Only the issue owner can submit additional information.");
+      return null;
+    }
+
+    if (currentIssue.status !== ISSUE_STATUSES.MORE_INFO_NEEDED) {
+      console.error("Additional information can only be submitted when issue status is More Info Needed.");
+      return null;
+    }
+
     const updatePayload = {
-      status: ISSUE_STATUSES.IN_PROGRESS,
-      additional_info: additionalInfo,
+      status: ISSUE_STATUSES.RESOLVED,
+      additional_info: additionalInfo || null,
+      more_info_request: null,
+      resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
@@ -1185,19 +1484,31 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
       return null;
     }
 
+    if (currentIssue?.student_email) {
+      await deleteUnreadIssueNotifications(issueId, [currentIssue.student_email], MORE_INFO_NOTIFICATION_TITLES);
+    }
+
     if (currentIssue?.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
       await createNotificationForEmail(currentIssue.technician, {
         issueId,
-        title: "Student provided additional information",
-        message: `Issue #${issueId}: Student submitted the requested information.`,
+        title: "Citizen provided additional information",
+        message: `Issue #${issueId}: Citizen submitted requested details. Issue marked as ${ISSUE_STATUSES.RESOLVED}.`,
       });
     }
 
     await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
       title: "Additional information submitted",
-      message: `Issue #${issueId} received additional information from the student.`,
+      message: `Issue #${issueId} received additional information from the citizen and moved to ${ISSUE_STATUSES.RESOLVED}.`,
     });
+
+    if (currentIssue?.student_email) {
+      await createNotificationForEmail(currentIssue.student_email, {
+        issueId,
+        title: "Additional information submitted",
+        message: `Your follow-up for issue #${issueId} was submitted and the issue is now marked ${ISSUE_STATUSES.RESOLVED}.`,
+      });
+    }
 
     return data;
   } catch (err) {
@@ -1210,9 +1521,38 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
 
 export async function submitTechnicianWork(issueId, workDescription, submissionImageUrl = null) {
   try {
+    const actorEmail = (getEmail() || "").toLowerCase();
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email, status, technician")
+      .eq("id", issueId)
+      .single();
+
+    if (!currentIssue) {
+      return null;
+    }
+
+    const assignedTechnician = (currentIssue.technician || "").toLowerCase();
+    if (
+      !assignedTechnician ||
+      currentIssue.technician === APP_CONFIG.DEFAULT_NOT_ASSIGNED ||
+      assignedTechnician !== actorEmail
+    ) {
+      console.error("Only the assigned technician can submit work for this issue.");
+      return null;
+    }
+
+    if (!isAllowedIssueTransition(currentIssue.status, ISSUE_STATUSES.RESOLVED)) {
+      console.error(
+        `Invalid issue transition for technician submission: ${currentIssue.status} -> ${ISSUE_STATUSES.RESOLVED}`
+      );
+      return null;
+    }
+
     const updatePayload = {
       status: ISSUE_STATUSES.RESOLVED,
       resolution_notes: workDescription,
+      more_info_request: null,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1220,12 +1560,6 @@ export async function submitTechnicianWork(issueId, workDescription, submissionI
     if (submissionImageUrl) {
       updatePayload.submission_image_url = submissionImageUrl;
     }
-
-    const { data: currentIssue } = await supabase
-      .from("issues")
-      .select("student_email")
-      .eq("id", issueId)
-      .single();
 
     const { data, error } = await supabase
       .from("issues")
@@ -1236,6 +1570,10 @@ export async function submitTechnicianWork(issueId, workDescription, submissionI
     if (error) {
       console.error("Error submitting technician work:", error);
       return null;
+    }
+
+    if (currentIssue?.student_email) {
+      await deleteUnreadIssueNotifications(issueId, [currentIssue.student_email], MORE_INFO_NOTIFICATION_TITLES);
     }
 
     if (currentIssue?.student_email) {
