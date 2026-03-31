@@ -1443,7 +1443,6 @@ export async function requestMoreInfo(issueId, infoRequest, technicianEmail = nu
 
 export async function submitAdditionalInfo(issueId, additionalInfo) {
   try {
-    const trimmedAdditionalInfo = (additionalInfo || "").trim();
     const { data: currentIssue } = await supabase
       .from("issues")
       .select("student_email, technician, status")
@@ -1466,16 +1465,11 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
       return null;
     }
 
-    const hasAssignedTechnician =
-      currentIssue.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED;
-    const nextStatus = hasAssignedTechnician ? ISSUE_STATUSES.IN_PROGRESS : ISSUE_STATUSES.PENDING;
-
     const updatePayload = {
-      status: nextStatus,
-      additional_info: trimmedAdditionalInfo || null,
+      status: ISSUE_STATUSES.RESOLVED,
+      additional_info: additionalInfo || null,
       more_info_request: null,
-      resolved_at: null,
-      closed_at: null,
+      resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
@@ -1498,25 +1492,21 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
       await createNotificationForEmail(currentIssue.technician, {
         issueId,
         title: "Citizen provided additional information",
-        message: trimmedAdditionalInfo
-          ? `Issue #${issueId}: Citizen note - ${trimmedAdditionalInfo}. Issue moved to ${nextStatus}.`
-          : `Issue #${issueId}: Citizen submitted requested photos/details. Issue moved to ${nextStatus}.`,
+        message: `Issue #${issueId}: Citizen submitted requested details. Issue marked as ${ISSUE_STATUSES.RESOLVED}.`,
       });
     }
 
     await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
       title: "Additional information submitted",
-      message: trimmedAdditionalInfo
-        ? `Issue #${issueId}: Citizen note - ${trimmedAdditionalInfo}. Issue moved to ${nextStatus}.`
-        : `Issue #${issueId} received additional information from the citizen and moved to ${nextStatus}.`,
+      message: `Issue #${issueId} received additional information from the citizen and moved to ${ISSUE_STATUSES.RESOLVED}.`,
     });
 
     if (currentIssue?.student_email) {
       await createNotificationForEmail(currentIssue.student_email, {
         issueId,
         title: "Additional information submitted",
-        message: `Your follow-up for issue #${issueId} was submitted and sent back to the technician for action (${nextStatus}).`,
+        message: `Your follow-up for issue #${issueId} was submitted and the issue is now marked ${ISSUE_STATUSES.RESOLVED}.`,
       });
     }
 

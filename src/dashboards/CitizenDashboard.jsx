@@ -221,7 +221,7 @@ function CitizenDashboard() {
       setAdditionalInfo((prev) => ({ ...prev, [issueId]: "" }));
       setAdditionalImages((prev) => ({ ...prev, [issueId]: null }));
       await loadDashboard();
-      setFeedback("Additional information submitted. The issue has been sent back to the assigned technician.");
+      setFeedback("Additional information submitted. The issue is now marked as resolved.");
     } catch (error) {
       setFeedback(error.message || "Failed to submit additional information.");
     } finally {
@@ -455,12 +455,6 @@ function CitizenDashboard() {
                     <td>
                       {issue.status === APP_CONFIG.ISSUE_STATUSES.RESOLVED ? (
                         <div className="verification-actions">
-                          {issue.additional_info && (
-                            <p className="inline-note"><strong>Your update:</strong> {issue.additional_info}</p>
-                          )}
-                          {issue.resolution_notes && (
-                            <p className="inline-note"><strong>Technician note:</strong> {issue.resolution_notes}</p>
-                          )}
                           <input
                             placeholder="Optional note"
                             value={resolutionNotes[issue.id] || ""}
@@ -492,9 +486,7 @@ function CitizenDashboard() {
                       ) : issue.status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED ? (
                         <div className="verification-actions">
                           <div className="more-info-request">
-                            <p className="info-message">
-                              <strong>Technician request:</strong> {issue.more_info_request || "Please share additional details."}
-                            </p>
+                            <p className="info-message">{issue.more_info_request}</p>
                           </div>
                           <input
                             placeholder="Provide additional information"
