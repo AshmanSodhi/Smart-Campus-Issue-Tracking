@@ -2,16 +2,16 @@
   display: flex;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 8% 10%, rgba(15, 47, 95, 0.13), transparent 24%),
-    radial-gradient(circle at 92% 86%, rgba(15, 94, 94, 0.14), transparent 28%),
-    linear-gradient(180deg, #f6f9fc 0%, #eaf0f8 100%);
+    radial-gradient(circle at 8% 10%, rgba(29, 78, 216, 0.13), transparent 24%),
+    radial-gradient(circle at 92% 86%, rgba(14, 116, 144, 0.16), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #ecf3ff 100%);
   font-family: "Segoe UI", "Tahoma", "Geneva", sans-serif;
   color: #1f2a44;
 }
 
 .sidebar {
   width: 272px;
-  background: linear-gradient(210deg, #0f2f5f 0%, #1f4f8c 50%, #0f5e5e 100%);
+  background: linear-gradient(210deg, #13326f 0%, #1d4ed8 50%, #0f4d77 100%);
   color: #fff;
   padding: 26px 18px;
   position: sticky;
@@ -52,10 +52,9 @@
 }
 
 .header h1 {
-  margin: 4px auto 0;
+  margin: 4px 0 0;
   font-size: clamp(1.45rem, 2.8vw, 2rem);
   color: #1f3f8f;
-  text-align: center;
 }
 
 .breadcrumbs {

@@ -35,8 +35,6 @@ function OfficerDashboard() {
 
   // More info request form state
   const [moreInfoForms, setMoreInfoForms] = useState({});
-  const [moreInfoImages, setMoreInfoImages] = useState({});
-  const [moreInfoPreviews, setMoreInfoPreviews] = useState({});
   const [showMoreInfoModal, setShowMoreInfoModal] = useState(null);
 
   const notificationPanelRef = useRef(null);
@@ -100,11 +98,7 @@ function OfficerDashboard() {
       return;
     }
 
-    const result = await updateIssueStatus(issue.id, status);
-    if (!result) {
-      setFeedback(`Status change is not allowed for issue #${issue.id}.`);
-      return;
-    }
+    await updateIssueStatus(issue.id, status);
     await loadIssues();
     if (issue.status !== status) {
       setLastStatusChange({ id: issue.id, previousStatus: issue.status });
@@ -116,8 +110,8 @@ function OfficerDashboard() {
     const description = submissionForms[issueId]?.description || "";
     const imageFile = submissionImages[issueId];
 
-    if (!description.trim()) {
-      setFeedback("Please add completion notes before marking this issue as resolved.");
+    if (!description.trim() && !imageFile) {
+      setFeedback("Please provide work description or upload completion image.");
       return;
     }
 
@@ -131,12 +125,7 @@ function OfficerDashboard() {
         }
       }
 
-      const result = await submitTechnicianWork(issueId, description, imageUrl);
-      if (!result) {
-        setFeedback(`Unable to submit work for issue #${issueId}.`);
-        setLoading(false);
-        return;
-      }
+      await submitTechnicianWork(issueId, description, imageUrl);
 
       setSubmissionForms((prev) => ({ ...prev, [issueId]: { description: "" } }));
       setSubmissionImages((prev) => ({ ...prev, [issueId]: null }));
@@ -154,7 +143,6 @@ function OfficerDashboard() {
 
   const handleRequestMoreInfo = async (issueId) => {
     const request = moreInfoForms[issueId]?.request || "";
-    const imageFile = moreInfoImages[issueId];
 
     if (!request.trim()) {
       setFeedback("Please provide details about what information you need.");
@@ -163,23 +151,8 @@ function OfficerDashboard() {
 
     setLoading(true);
     try {
-      if (imageFile) {
-        const imageUrl = await uploadIssueImage(imageFile, issueId);
-        if (imageUrl) {
-          await saveImageReference(issueId, imageUrl);
-        }
-      }
-
-      const result = await requestMoreInfo(issueId, request.trim());
-      if (!result) {
-        setFeedback(`Unable to request more information for issue #${issueId}.`);
-        setLoading(false);
-        return;
-      }
-
+      await requestMoreInfo(issueId, request);
       setMoreInfoForms((prev) => ({ ...prev, [issueId]: { request: "" } }));
-      setMoreInfoImages((prev) => ({ ...prev, [issueId]: null }));
-      setMoreInfoPreviews((prev) => ({ ...prev, [issueId]: null }));
       setShowMoreInfoModal(null);
       await loadIssues();
       setFeedback(`More information requested for issue #${issueId}. Student will be notified.`);
@@ -214,30 +187,6 @@ function OfficerDashboard() {
     reader.readAsDataURL(file);
   };
 
-  const handleMoreInfoImageSelect = (e, issueId) => {
-    const file = e.target.files[0];
-    if (!file) {
-      return;
-    }
-
-    if (file.size > APP_CONFIG.MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-      setFeedback(`Image size exceeds ${APP_CONFIG.MAX_IMAGE_SIZE_MB}MB limit.`);
-      return;
-    }
-
-    if (!APP_CONFIG.ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      setFeedback("Please upload a valid image (JPEG, PNG, or WebP).");
-      return;
-    }
-
-    setMoreInfoImages((prev) => ({ ...prev, [issueId]: file }));
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setMoreInfoPreviews((prev) => ({ ...prev, [issueId]: event.target.result }));
-    };
-    reader.readAsDataURL(file);
-  };
-
   const markRead = async (notificationId) => {
     await markNotificationRead(notificationId);
     await loadIssues();
@@ -245,13 +194,6 @@ function OfficerDashboard() {
 
   const getStatusClass = (status) => {
     return `status ${getStatusBadgeClass(status)}`;
-  };
-
-  const getOfficerStatusOptions = (status) => {
-    const transitions = APP_CONFIG.ISSUE_TRANSITIONS[status] || [];
-    const officerTargets = [APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED, APP_CONFIG.ISSUE_STATUSES.RESOLVED];
-    const allowedTargets = transitions.filter((nextStatus) => officerTargets.includes(nextStatus));
-    return [status, ...allowedTargets];
   };
 
   const pendingCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING).length;
@@ -279,9 +221,9 @@ function OfficerDashboard() {
 
       <div className="main-content">
         <div className="header">
-          <div className="header-main">
-            <p className="breadcrumbs">Home / Technician / Assigned Issues</p>
-            <h1>Technician Dashboard</h1>
+          <div>
+            <p className="breadcrumbs">Home / Officer / Assigned Issues</p>
+            <h1>Government Officer Dashboard</h1>
             <p className="helper-text">Submit your work with optional completion images and request more info when needed.</p>
           </div>
           <div className="notification-bell-container" ref={notificationPanelRef}>
@@ -360,73 +302,69 @@ function OfficerDashboard() {
           ) : issues.length === 0 ? (
             <p>No issues assigned yet.</p>
           ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Title</th>
-                    <th>Category</th>
-                    <th>Priority</th>
-                    <th>Location</th>
-                    <th>Status</th>
-                    <th>Citizen</th>
-                    <th>Images</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {issues.map((issue) => (
-                    <tr key={issue.id}>
-                      <td>{issue.id}</td>
-                      <td>{issue.title}</td>
-                      <td>{issue.category}</td>
-                      <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
-                      <td>{issue.location}</td>
-                      <td>
-                        <span className={getStatusClass(issue.status)}>{issue.status}</span>
-                      </td>
-                      <td>{issue.student_email}</td>
-                      <td>
-                        {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
-                          <div className="image-gallery">
-                            {issueImages[issue.id].map((img, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => setSelectedImage(img.image_url)}
-                                className="image-link"
-                              >
-                                View
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          "No images"
-                        )}
-                      </td>
-                      <td>
-                        <select
-                          id={`statusSelect-${issue.id}`}
-                          name={`statusSelect-${issue.id}`}
-                          value={issue.status}
-                          onChange={(e) => handleStatusChange(issue, e.target.value)}
-                          disabled={
-                            loading ||
-                            issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED ||
-                            getOfficerStatusOptions(issue.status).length <= 1
-                          }
-                          className="status-select"
-                        >
-                          {getOfficerStatusOptions(issue.status).map((statusOption) => (
-                            <option key={statusOption}>{statusOption}</option>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Citizen</th>
+                  <th>Images</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {issues.map((issue) => (
+                  <tr key={issue.id}>
+                    <td>{issue.id}</td>
+                    <td>{issue.title}</td>
+                    <td>{issue.category}</td>
+                    <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
+                    <td>{issue.location}</td>
+                    <td>
+                      <span className={getStatusClass(issue.status)}>{issue.status}</span>
+                    </td>
+                    <td>{issue.student_email}</td>
+                    <td>
+                      {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
+                        <div className="image-gallery">
+                          {issueImages[issue.id].map((img, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setSelectedImage(img.image_url)}
+                              className="image-link"
+                            >
+                              View
+                            </button>
                           ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      ) : (
+                        "No images"
+                      )}
+                    </td>
+                    <td>
+                      <select
+                        id={`statusSelect-${issue.id}`}
+                        name={`statusSelect-${issue.id}`}
+                        value={issue.status}
+                        onChange={(e) => handleStatusChange(issue, e.target.value)}
+                        disabled={loading || issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED}
+                        className="status-select"
+                      >
+                        <option>{APP_CONFIG.ISSUE_STATUSES.PENDING}</option>
+                        <option>{APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS}</option>
+                        <option>{APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED}</option>
+                        <option>{APP_CONFIG.ISSUE_STATUSES.RESOLVED}</option>
+                        <option>{APP_CONFIG.ISSUE_STATUSES.CLOSED}</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -439,7 +377,7 @@ function OfficerDashboard() {
               X
             </button>
             <h3>Submit Work Completion</h3>
-            <p>Add completion notes (required) and optionally upload a photo.</p>
+            <p>Describe the work you've completed and optionally upload a photo.</p>
             <div className="form">
               <textarea
                 id="workCompletionDescription"
@@ -515,24 +453,6 @@ function OfficerDashboard() {
                 disabled={loading}
                 rows="5"
               />
-
-              <div className="image-upload-section">
-                <label htmlFor="moreInfoRequestImage">Upload Reference Photo (Optional):</label>
-                <input
-                  id="moreInfoRequestImage"
-                  name="moreInfoRequestImage"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleMoreInfoImageSelect(e, showMoreInfoModal)}
-                  disabled={loading}
-                />
-
-                {moreInfoPreviews[showMoreInfoModal] && (
-                  <div className="image-preview">
-                    <img src={moreInfoPreviews[showMoreInfoModal]} alt="Request reference preview" />
-                  </div>
-                )}
-              </div>
 
               <div className="modal-buttons">
                 <button onClick={() => setShowMoreInfoModal(null)} className="btn-cancel" disabled={loading}>
