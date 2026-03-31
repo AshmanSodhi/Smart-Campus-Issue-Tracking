@@ -8,6 +8,7 @@ import {
   markNotificationRead,
   requestMoreInfo,
   submitTechnicianWork,
+  updateIssueStatus,
   uploadIssueImage,
   saveImageReference,
 } from "../services/supabaseService";
@@ -88,16 +89,16 @@ function OfficerDashboard() {
     }
 
     setLoading(true);
-    await updateIssueStatusSimple(issue, status, null, null);
+    await updateIssueStatusSimple(issue, status);
     setLoading(false);
   };
 
-  const updateIssueStatusSimple = async (issue, status, completionNote, submissionImageUrl) => {
+  const updateIssueStatusSimple = async (issue, status) => {
     if (status === APP_CONFIG.ISSUE_STATUSES.CLOSED && !window.confirm("Close this issue? You can undo this change.")) {
       return;
     }
 
-    await submitTechnicianWork(issue.id, completionNote || "", submissionImageUrl || null);
+    await updateIssueStatus(issue.id, status);
     await loadIssues();
     if (issue.status !== status) {
       setLastStatusChange({ id: issue.id, previousStatus: issue.status });
@@ -124,7 +125,6 @@ function OfficerDashboard() {
         }
       }
 
-      const issue = issues.find((i) => i.id === issueId);
       await submitTechnicianWork(issueId, description, imageUrl);
 
       setSubmissionForms((prev) => ({ ...prev, [issueId]: { description: "" } }));

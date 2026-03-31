@@ -180,20 +180,32 @@ th {
   justify-content: center;
 }
 
-.pending {
+.pending,
+.badge-pending {
   background: #b86a00;
 }
 
-.inprogress {
+.inprogress,
+.badge-in-progress {
   background: #1d4ed8;
 }
 
-.resolved {
+.resolved,
+.badge-resolved {
   background: #0f8a5f;
 }
 
-.closed {
+.badge-more-info {
+  background: #9a3f97;
+}
+
+.closed,
+.badge-closed {
   background: #4a556d;
+}
+
+.badge-default {
+  background: #667085;
 }
 
 .notification-list {

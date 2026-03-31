@@ -7,6 +7,12 @@ export const APP_CONFIG = {
   // Default values
   DEFAULT_NOT_ASSIGNED: "Not Assigned",
   DEFAULT_ROLE: "citizen",
+  DEFAULT_DB_ROLE: "student",
+
+  // Auth settings
+  AUTH: {
+    ALLOWED_GOOGLE_DOMAIN: (import.meta.env.VITE_ALLOWED_GOOGLE_DOMAIN || "vitstudent.ac.in").toLowerCase(),
+  },
   
   // Status values
   ISSUE_STATUSES: {
@@ -22,6 +28,12 @@ export const APP_CONFIG = {
     CITIZEN: "citizen",
     ADMIN: "admin",
     OFFICER: "officer",
+  },
+
+  DB_ROLES: {
+    STUDENT: "student",
+    ADMIN: "admin",
+    TECHNICIAN: "technician",
   },
   
   // Role display names
@@ -58,6 +70,15 @@ export const APP_CONFIG = {
 
   // Auto-close settings
   AUTO_CLOSE_DAYS: 7,
+
+  // Valid issue stage transitions
+  ISSUE_TRANSITIONS: {
+    Pending: ["In Progress", "More Info Needed", "Resolved", "Closed"],
+    "In Progress": ["More Info Needed", "Resolved", "Closed", "Pending"],
+    "More Info Needed": ["In Progress", "Pending", "Resolved", "Closed"],
+    Resolved: ["Closed", "In Progress", "Pending"],
+    Closed: [],
+  },
 
   // Notification types
   NOTIFICATION_TYPES: {
@@ -104,4 +125,47 @@ export const getStatusBadgeClass = (status) => {
     "closed": "badge-closed",
   };
   return classMap[normalizedStatus] || "badge-default";
+};
+
+export const normalizePortalRole = (role) => {
+  const normalized = (role || "").toLowerCase();
+  if (normalized === APP_CONFIG.DB_ROLES.STUDENT) {
+    return APP_CONFIG.ROLES.CITIZEN;
+  }
+  if (normalized === APP_CONFIG.DB_ROLES.TECHNICIAN) {
+    return APP_CONFIG.ROLES.OFFICER;
+  }
+  if (normalized === APP_CONFIG.ROLES.CITIZEN || normalized === APP_CONFIG.ROLES.ADMIN || normalized === APP_CONFIG.ROLES.OFFICER) {
+    return normalized;
+  }
+  return null;
+};
+
+export const normalizeDatabaseRole = (role) => {
+  const normalized = (role || "").toLowerCase();
+  if (normalized === APP_CONFIG.ROLES.CITIZEN) {
+    return APP_CONFIG.DB_ROLES.STUDENT;
+  }
+  if (normalized === APP_CONFIG.ROLES.OFFICER) {
+    return APP_CONFIG.DB_ROLES.TECHNICIAN;
+  }
+  if (
+    normalized === APP_CONFIG.DB_ROLES.STUDENT ||
+    normalized === APP_CONFIG.DB_ROLES.ADMIN ||
+    normalized === APP_CONFIG.DB_ROLES.TECHNICIAN
+  ) {
+    return normalized;
+  }
+  return null;
+};
+
+export const isAllowedIssueTransition = (fromStatus, toStatus) => {
+  if (!fromStatus || !toStatus) {
+    return false;
+  }
+  if (fromStatus === toStatus) {
+    return true;
+  }
+  const allowedTargets = APP_CONFIG.ISSUE_TRANSITIONS[fromStatus] || [];
+  return allowedTargets.includes(toStatus);
 };

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -7,11 +7,17 @@ import CitizenDashboard from "./dashboards/CitizenDashboard";
 import AdminDashboard from "./dashboards/AdminDashboard";
 import OfficerDashboard from "./dashboards/OfficerDashboard";
 import { autoCloseResolvedIssues } from "./services/supabaseService";
+import { APP_CONFIG } from "./config/appConfig";
 
 function App() {
+  const hasRunAutoCloseRef = useRef(false);
+
   useEffect(() => {
-    // Run auto-close on app load
-    autoCloseResolvedIssues();
+    if (hasRunAutoCloseRef.current) {
+      return;
+    }
+    hasRunAutoCloseRef.current = true;
+    autoCloseResolvedIssues(APP_CONFIG.AUTO_CLOSE_DAYS);
   }, []);
 
   return (
@@ -49,6 +55,3 @@ function App() {
 }
 
 export default App;
-
-
-/* export default App; */

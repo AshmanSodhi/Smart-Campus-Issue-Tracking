@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  autoCloseResolvedIssues,
   confirmResolution,
   getIssueImages,
   getNotifications,
@@ -73,8 +72,6 @@ function CitizenDashboard() {
 
   const loadDashboard = async () => {
     setLoading(true);
-    await autoCloseResolvedIssues();
-
     const fetchedIssues = await getCitizenIssues();
     setIssues(fetchedIssues);
 

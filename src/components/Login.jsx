@@ -6,6 +6,7 @@ import {
   signInWithGoogle,
   submitTechnicianApplication,
 } from "../services/supabaseService";
+import { APP_CONFIG, normalizePortalRole } from "../config/appConfig";
 import "./login.css";
 
 function Login() {
@@ -26,17 +27,26 @@ function Login() {
 
   const navigate = useNavigate();
 
+  const navigateForRole = (roleValue) => {
+    const role = normalizePortalRole(roleValue);
+    if (role === APP_CONFIG.ROLES.CITIZEN) {
+      navigate("/citizen");
+      return;
+    }
+    if (role === APP_CONFIG.ROLES.ADMIN) {
+      navigate("/admin");
+      return;
+    }
+    if (role === APP_CONFIG.ROLES.OFFICER) {
+      navigate("/officer");
+    }
+  };
+
   useEffect(() => {
     const restoreSession = async () => {
       try {
         const role = await initializeAuthFromSession();
-        if (role === "citizen") {
-          navigate("/citizen");
-        } else if (role === "admin") {
-          navigate("/admin");
-        } else if (role === "officer") {
-          navigate("/officer");
-        }
+        navigateForRole(role);
       } catch (error) {
         setErrorMessage(error.message || "Login blocked: please use your government account.");
       }
@@ -61,13 +71,7 @@ function Login() {
     setErrorMessage("");
     try {
       const role = await loginWithEmailAndPassword(emailLoginInput, adminPassword);
-      if (role === "citizen") {
-        navigate("/citizen");
-      } else if (role === "admin") {
-        navigate("/admin");
-      } else if (role === "officer") {
-        navigate("/officer");
-      }
+      navigateForRole(role);
     } catch (error) {
       setErrorMessage(error.message || "Email/password login failed.");
     }
@@ -106,6 +110,10 @@ function Login() {
     <div className="login-container">
       <div className="login-shell">
         <section className="login-showcase" aria-label="Government Issue Tracking introduction">
+          <div className="showcase-brand">
+            <img src="/logo-verification.svg" alt="Government Issue Tracking logo" className="showcase-logo" />
+            <span>{APP_CONFIG.APP_NAME}</span>
+          </div>
           <p className="showcase-kicker">Government Issue Tracking</p>
           <h1>Issue Tracking and Resolution Hub</h1>
           <p>
@@ -225,7 +233,7 @@ function Login() {
           <div className="login-info">
             Use Google for citizen access. Admin/officer access requires database role + password auth.
             <br />
-            <button className="link-btn"onClick={() => navigate("/register")}>
+            <button className="link-btn" onClick={() => navigate("/register")}>
               Apply for Officer Access (Dedicated Form)
             </button>
           </div>
