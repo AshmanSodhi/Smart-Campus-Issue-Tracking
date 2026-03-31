@@ -105,8 +105,8 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-shell">
-        <section className="login-showcase" aria-label="Smart Campus introduction">
-          <p className="showcase-kicker">Smart Campus</p>
+        <section className="login-showcase" aria-label="Government Issue Tracking introduction">
+          <p className="showcase-kicker">Government Issue Tracking</p>
           <h1>Issue Tracking and Resolution Hub</h1>
           <p>
             Report issues, follow progress, and collaborate with your campus operations teams
@@ -119,7 +119,7 @@ function Login() {
           </div>
         </section>
 
-        <section className="login-card" aria-label="Sign in to Smart Campus">
+        <section className="login-card" aria-label="Sign in to Government Issue Tracking">
           <h2>Welcome Back</h2>
           <p className="login-subtitle">
             Citizens must use Google OAuth. Admin and Government Officers can login with email and password.

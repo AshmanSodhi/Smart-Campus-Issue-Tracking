@@ -871,7 +871,7 @@ export { supabase };
 // ============ DIAGNOSTIC FUNCTIONS ============
 
 export async function checkSetup() {
-  console.log("\n=== SMART CAMPUS SETUP DIAGNOSTIC ===\n");
+  console.log("\n=== GOVERNMENT ISSUE TRACKING SETUP DIAGNOSTIC ===\n");
 
   console.log("1) Supabase connection");
   console.log("   URL:", SUPABASE_URL);

@@ -1,4 +1,4 @@
-// Shared configuration and constants for Smart Campus Issue Tracking
+// Shared configuration and constants for Government Issue Tracking System
 
 export const ISSUE_STATUSES = {
   PENDING: "Pending",

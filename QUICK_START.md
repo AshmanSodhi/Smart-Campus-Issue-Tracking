@@ -20,19 +20,22 @@
 ## 🚀 Next Steps: Setup Supabase (5-10 minutes)
 
 ### Step 1️⃣: Create Supabase Project
+
 - Go to https://supabase.com → Sign up (free)
 - Click "New Project"
-- Name it: `smart-campus`
+- Name it: `gov-issue-tracking`
 - Choose password and region
 - Wait 2-3 minutes
 
 ### Step 2️⃣: Create Database Tables
+
 1. In Supabase Dashboard → **SQL Editor**
 2. Click **"New Query"**
 3. Copy-paste everything from `SUPABASE_SETUP.sql`
 4. Click **"Run"**
 
 ### Step 3️⃣: Create Storage Bucket
+
 1. Go to **Storage → Buckets**
 2. Click **"New Bucket"**
 3. Name: `issue-images`
@@ -40,6 +43,7 @@
 5. Click **"Create"**
 
 ### Step 4️⃣: Add Your Credentials
+
 1. In Supabase Dashboard → **Settings → API**
 2. Copy your **Project URL** and **Anon Public Key**
 3. Open `.env.local` in your project:
@@ -52,17 +56,20 @@
 4. Save the file
 
 ### Step 4.6️⃣: Apply Updated Schema
+
 1. Open **SQL Editor**
 2. Run `SUPABASE_SETUP.sql` again on a fresh DB, OR run the `OPTIONAL MIGRATION` ALTER statements at the bottom for existing DBs
 3. This adds `priority`, resolution metadata, and `notifications` table
 
 ### Step 4.5️⃣: Enable Google Login in Supabase Auth
+
 1. Go to **Authentication → Providers → Google**
 2. Enable Google provider and add your Google OAuth Client ID + Secret
 3. Add redirect URL: `http://localhost:5173`
 4. In Google Cloud Console, add the same redirect URL in OAuth client settings
 
 ### Step 5️⃣: Start Development
+
 ```bash
 cd smart-campus
 npm run dev
@@ -77,8 +84,8 @@ npm run dev
 3. Submit an issue with an image
 4. Verify admin routing with an email mapped to `admin` in `user_roles`
 5. Verify technician routing with an email mapped to `technician` in `user_roles`
-5. See all issues and manage them
-6. Click "View" on images to see the uploaded photo
+6. See all issues and manage them
+7. Click "View" on images to see the uploaded photo
 
 ---
 
@@ -101,14 +108,17 @@ npm run dev
 ## ⚙️ How It Works
 
 ### Database
+
 - **issues** table: Stores title, description, category, status, technician, student_email
 - **issue_images** table: References issue_id and stores image URL
 
 ### Storage
+
 - Images uploaded to `issue-images` bucket as public files
 - URLs stored in database for easy retrieval
 
 ### Authentication
+
 - Uses Supabase Google OAuth now
 - Roles are resolved from `user_roles` in database
 - Any email can sign in; role controls dashboard access
