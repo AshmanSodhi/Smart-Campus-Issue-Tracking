@@ -292,6 +292,29 @@ function AdminDashboard() {
     return [status, ...transitions.filter((nextStatus) => nextStatus !== status)];
   };
 
+  const renderIssueNotes = (issue) => {
+    const notes = [
+      issue.more_info_request ? { label: "Request", value: issue.more_info_request } : null,
+      issue.additional_info ? { label: "Citizen", value: issue.additional_info } : null,
+      issue.resolution_notes ? { label: "Work", value: issue.resolution_notes } : null,
+      issue.student_feedback ? { label: "Feedback", value: issue.student_feedback } : null,
+    ].filter(Boolean);
+
+    if (!notes.length) {
+      return "-";
+    }
+
+    return (
+      <div className="issue-notes">
+        {notes.map((note, index) => (
+          <p className="issue-note" key={`${issue.id}-${note.label}-${index}`}>
+            <strong>{note.label}:</strong> {note.value}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-container">
       <div className="sidebar">
@@ -343,7 +366,7 @@ function AdminDashboard() {
                 aria-expanded={showNotifications}
                 onClick={() => setShowNotifications((prev) => !prev)}
               >
-                <span className="notification-bell" aria-hidden="true">
+                <span className="notification-icon" aria-hidden="true">
                   🔔
                 </span>
                 {unreadNotificationsCount > 0 && (
@@ -476,38 +499,45 @@ function AdminDashboard() {
                   ) : issues.length === 0 ? (
                     <p>No issues reported yet.</p>
                   ) : (
-                    <div className="table-scroll">
-                      <table>
+                    <div className="table-scroll table-scroll-issues">
+                      <table className="issues-table admin-issues-table">
                         <thead>
                           <tr>
                             <th>ID</th>
-                            <th>Title</th>
-                            <th>Category</th>
-                            <th>Priority</th>
-                            <th>Location</th>
-                            <th>Status</th>
-                            <th>Technician</th>
-                            <th>Student Email</th>
-                            <th>Feedback</th>
-                            <th>Images</th>
-                            <th>Assign Technician</th>
-                            <th>Change Status</th>
+                            <th>Issue Details</th>
+                            <th>Reporter</th>
+                            <th>Latest Notes</th>
+                            <th>Media</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {issues.map((issue) => (
                             <tr key={issue.id}>
                               <td>{issue.id}</td>
-                              <td>{issue.title}</td>
-                              <td>{issue.category}</td>
-                              <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
-                              <td>{issue.location}</td>
-                              <td>
-                                <span className={getStatusClass(issue.status)}>{issue.status}</span>
+                              <td className="issue-summary-cell">
+                                <p className="issue-title">{issue.title}</p>
+                                <div className="issue-meta-grid">
+                                  <span>
+                                    <strong>Category:</strong> {issue.category}
+                                  </span>
+                                  <span>
+                                    <strong>Priority:</strong> {issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}
+                                  </span>
+                                  <span>
+                                    <strong>Location:</strong> {issue.location}
+                                  </span>
+                                </div>
                               </td>
-                              <td>{issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}</td>
-                              <td>{issue.student_email}</td>
-                              <td>{issue.student_feedback || "-"}</td>
+                              <td className="issue-reporter-cell">
+                                <p className="reporter-email">{issue.student_email}</p>
+                                {issue.created_at && (
+                                  <p className="reporter-time">
+                                    Reported {new Date(issue.created_at).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </td>
+                              <td>{renderIssueNotes(issue)}</td>
                               <td>
                                 {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
                                   <div className="image-gallery">
@@ -526,27 +556,38 @@ function AdminDashboard() {
                                   "No images"
                                 )}
                               </td>
-                              <td>
-                                <select
-                                  value={issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
-                                  onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
-                                  disabled={loading || isAssignmentLocked(issue.status)}
-                                >
-                                  {technicians.map((tech) => (
-                                    <option key={tech}>{tech}</option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td>
-                                <select
-                                  value={issue.status}
-                                  onChange={(e) => updateStatus(issue.id, e.target.value)}
-                                  disabled={loading}
-                                >
-                                  {getAllowedStatusOptions(issue.status).map((status) => (
-                                    <option key={status}>{status}</option>
-                                  ))}
-                                </select>
+                              <td className="issue-actions-cell">
+                                <div className="admin-action-group">
+                                  <p className="action-label">Technician</p>
+                                  <p className="current-tech">
+                                    <strong>Current:</strong> {issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
+                                  </p>
+                                  <select
+                                    value={issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
+                                    onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
+                                    disabled={loading || isAssignmentLocked(issue.status)}
+                                  >
+                                    {technicians.map((tech) => (
+                                      <option key={tech}>{tech}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div className="admin-action-group">
+                                  <p className="action-label">Status</p>
+                                  <div className="status-control-row">
+                                    <span className={getStatusClass(issue.status)}>{issue.status}</span>
+                                    <select
+                                      value={issue.status}
+                                      onChange={(e) => updateStatus(issue.id, e.target.value)}
+                                      disabled={loading}
+                                    >
+                                      {getAllowedStatusOptions(issue.status).map((status) => (
+                                        <option key={status}>{status}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
                               </td>
                             </tr>
                           ))}

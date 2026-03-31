@@ -253,6 +253,28 @@ th {
   min-width: 170px;
 }
 
+.inline-note {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d5e2f8;
+  background: #f5f9ff;
+  font-size: 0.84rem;
+  color: #2f466f;
+  line-height: 1.35;
+}
+
+.info-message {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d5e2f8;
+  background: #f5f9ff;
+  font-size: 0.84rem;
+  color: #2f466f;
+  line-height: 1.35;
+}
+
 .image-upload-section {
   margin-top: 12px;
   padding: 10px;

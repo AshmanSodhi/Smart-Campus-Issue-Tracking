@@ -254,6 +254,41 @@ function OfficerDashboard() {
     return [status, ...allowedTargets];
   };
 
+  const getOfficerStatusLabel = (status) => {
+    if (status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED) {
+      return "Completed";
+    }
+    return status;
+  };
+
+  const renderIssueNotes = (issue) => {
+    const notes = [
+      issue.more_info_request
+        ? { label: "Request", value: issue.more_info_request }
+        : null,
+      issue.additional_info
+        ? { label: "Citizen", value: issue.additional_info }
+        : null,
+      issue.resolution_notes
+        ? { label: "Work", value: issue.resolution_notes }
+        : null,
+    ].filter(Boolean);
+
+    if (!notes.length) {
+      return "-";
+    }
+
+    return (
+      <div className="issue-notes">
+        {notes.map((note, index) => (
+          <p className="issue-note" key={`${issue.id}-${note.label}-${index}`}>
+            <strong>{note.label}:</strong> {note.value}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
   const pendingCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING).length;
   const inProgressCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS).length;
   const moreInfoCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED).length;
@@ -337,7 +372,7 @@ function OfficerDashboard() {
             <strong>{inProgressCount}</strong>
           </article>
           <article className="metric-card">
-            <p>More Info Needed</p>
+            <p>Completed</p>
             <strong>{moreInfoCount}</strong>
           </article>
           <article className="metric-card">
@@ -361,7 +396,7 @@ function OfficerDashboard() {
             <p>No issues assigned yet.</p>
           ) : (
             <div className="table-scroll">
-              <table>
+              <table className="issues-table officer-issues-table">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -372,6 +407,7 @@ function OfficerDashboard() {
                     <th>Status</th>
                     <th>Citizen</th>
                     <th>Images</th>
+                    <th>Latest Notes</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -384,7 +420,7 @@ function OfficerDashboard() {
                       <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                       <td>{issue.location}</td>
                       <td>
-                        <span className={getStatusClass(issue.status)}>{issue.status}</span>
+                        <span className={getStatusClass(issue.status)}>{getOfficerStatusLabel(issue.status)}</span>
                       </td>
                       <td>{issue.student_email}</td>
                       <td>
@@ -404,6 +440,7 @@ function OfficerDashboard() {
                           "No images"
                         )}
                       </td>
+                      <td>{renderIssueNotes(issue)}</td>
                       <td>
                         <select
                           id={`statusSelect-${issue.id}`}
@@ -418,7 +455,9 @@ function OfficerDashboard() {
                           className="status-select"
                         >
                           {getOfficerStatusOptions(issue.status).map((statusOption) => (
-                            <option key={statusOption}>{statusOption}</option>
+                            <option key={statusOption} value={statusOption}>
+                              {getOfficerStatusLabel(statusOption)}
+                            </option>
                           ))}
                         </select>
                       </td>
@@ -498,13 +537,13 @@ function OfficerDashboard() {
             <button className="modal-close" onClick={() => setShowMoreInfoModal(null)}>
               X
             </button>
-            <h3>Request More Information</h3>
-            <p>Specify what additional information or photos you need from the citizen.</p>
+            <h3>Mark as Completed</h3>
+            <p>Add what the citizen should share next. This update will be sent back to the citizen.</p>
             <div className="form">
               <textarea
                 id="moreInfoRequest"
                 name="moreInfoRequest"
-                placeholder="What information do you need from the citizen?"
+                placeholder="Add completion note or specify the additional details needed from the citizen"
                 value={moreInfoForms[showMoreInfoModal]?.request || ""}
                 onChange={(e) =>
                   setMoreInfoForms((prev) => ({
@@ -543,7 +582,7 @@ function OfficerDashboard() {
                   className="btn-primary"
                   disabled={loading}
                 >
-                  {loading ? "Sending..." : "Request Information"}
+                  {loading ? "Sending..." : "Mark Completed"}
                 </button>
               </div>
             </div>
