@@ -9,9 +9,11 @@ import {
   markNotificationRead,
   saveImageReference,
   submitIssue,
+  submitAdditionalInfo,
   uploadIssueImage,
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
+import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
 import "./student.css";
 
 function StudentDashboard() {
@@ -20,7 +22,11 @@ function StudentDashboard() {
   const [issues, setIssues] = useState([]);
   const [issueImages, setIssueImages] = useState({});
   const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState({});
+  const [additionalInfo, setAdditionalInfo] = useState({});
+  const [additionalImages, setAdditionalImages] = useState({});
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [feedback, setFeedback] = useState("");
@@ -29,11 +35,12 @@ function StudentDashboard() {
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [category, setCategory] = useState("");
-  const [priority, setPriority] = useState("Medium");
+  const [priority, setPriority] = useState(APP_CONFIG.PRIORITIES.MEDIUM);
   const [imageFile, setImageFile] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
 
   const titleInputRef = useRef(null);
+  const notificationPanelRef = useRef(null);
 
   useEffect(() => {
     loadDashboard();
@@ -50,6 +57,19 @@ function StudentDashboard() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (notificationPanelRef.current && !notificationPanelRef.current.contains(e.target)) {
+        setShowNotificationPanel(false);
+      }
+    };
+
+    if (showNotificationPanel) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotificationPanel]);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -68,6 +88,8 @@ function StudentDashboard() {
 
     const fetchedNotifications = await getNotifications();
     setNotifications(fetchedNotifications);
+    const unreadCount = fetchedNotifications.filter((n) => !n.is_read).length;
+    setUnreadNotificationCount(unreadCount);
     setLoading(false);
   };
 
@@ -77,10 +99,42 @@ function StudentDashboard() {
       return;
     }
 
+    if (file.size > APP_CONFIG.MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+      setFeedback(`Image size exceeds ${APP_CONFIG.MAX_IMAGE_SIZE_MB}MB limit.`);
+      return;
+    }
+
+    if (!APP_CONFIG.ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setFeedback("Please upload a valid image (JPEG, PNG, or WebP).");
+      return;
+    }
+
     setImageFile(file);
     const reader = new FileReader();
     reader.onload = (event) => setPreviewImage(event.target.result);
     reader.readAsDataURL(file);
+  };
+
+  const handleAdditionalImageSelect = (e, issueId) => {
+    const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.size > APP_CONFIG.MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+      setFeedback(`Image size exceeds ${APP_CONFIG.MAX_IMAGE_SIZE_MB}MB limit.`);
+      return;
+    }
+
+    if (!APP_CONFIG.ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setFeedback("Please upload a valid image (JPEG, PNG, or WebP).");
+      return;
+    }
+
+    setAdditionalImages((prev) => ({
+      ...prev,
+      [issueId]: file,
+    }));
   };
 
   const handleSubmit = async () => {
@@ -121,7 +175,7 @@ function StudentDashboard() {
       setDescription("");
       setLocation("");
       setCategory("");
-      setPriority("Medium");
+      setPriority(APP_CONFIG.PRIORITIES.MEDIUM);
       setImageFile(null);
       setPreviewImage(null);
       await loadDashboard();
@@ -142,22 +196,59 @@ function StudentDashboard() {
     setLoading(false);
   };
 
+  const handleSubmitAdditionalInfo = async (issueId) => {
+    const infoText = additionalInfo[issueId]?.trim() || "";
+    const infoImage = additionalImages[issueId];
+
+    if (!infoText && !infoImage) {
+      setFeedback("Please provide additional information or upload an image.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (infoImage) {
+        const imageUrl = await uploadIssueImage(infoImage, issueId);
+        if (imageUrl) {
+          await saveImageReference(issueId, imageUrl);
+        }
+      }
+
+      if (infoText) {
+        await submitAdditionalInfo(issueId, infoText);
+      }
+
+      setAdditionalInfo((prev) => ({ ...prev, [issueId]: "" }));
+      setAdditionalImages((prev) => ({ ...prev, [issueId]: null }));
+      await loadDashboard();
+      setFeedback("Additional information submitted successfully.");
+    } catch (error) {
+      setFeedback(error.message || "Failed to submit additional information.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const markRead = async (notificationId) => {
     await markNotificationRead(notificationId);
     await loadDashboard();
   };
 
   const getStatusClass = (status) => {
-    if (status === "Pending") return "status pending";
-    if (status === "In Progress") return "status inprogress";
-    if (status === "Resolved") return "status resolved";
-    if (status === "Closed") return "status closed";
-    return "status";
+    return `status ${getStatusBadgeClass(status)}`;
   };
 
-  const pendingCount = issues.filter((issue) => issue.status === "Pending").length;
-  const inProgressCount = issues.filter((issue) => issue.status === "In Progress").length;
-  const resolvedOrClosedCount = issues.filter((issue) => issue.status === "Resolved" || issue.status === "Closed").length;
+  const pendingCount = issues.filter(
+    (issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING
+  ).length;
+  const inProgressCount = issues.filter(
+    (issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS
+  ).length;
+  const resolvedOrClosedCount = issues.filter(
+    (issue) =>
+      issue.status === APP_CONFIG.ISSUE_STATUSES.RESOLVED ||
+      issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED
+  ).length;
 
   return (
     <div className="dashboard-container">
@@ -181,6 +272,43 @@ function StudentDashboard() {
             <h1>Student Dashboard</h1>
             <p className="helper-text">Shortcut: press Alt + N to jump to the new issue form.</p>
           </div>
+          <div className="notification-bell-container" ref={notificationPanelRef}>
+            <button
+              className="notification-bell"
+              onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+              title="View notifications"
+            >
+              🔔
+              {unreadNotificationCount > 0 && (
+                <span className="notification-badge">{unreadNotificationCount}</span>
+              )}
+            </button>
+            {showNotificationPanel && (
+              <div className="notification-dropdown">
+                <h4>Notifications</h4>
+                {notifications.length === 0 ? (
+                  <p className="no-notifications">No notifications</p>
+                ) : (
+                  <ul className="notification-list">
+                    {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
+                      <li
+                        key={notification.id}
+                        className={notification.is_read ? "notification read" : "notification unread"}
+                      >
+                        <div>
+                          <strong>{notification.title}</strong>
+                          <p>{notification.message}</p>
+                        </div>
+                        {!notification.is_read && (
+                          <button onClick={() => markRead(notification.id)}>✓</button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="metrics-row" aria-label="Student summary">
@@ -203,25 +331,6 @@ function StudentDashboard() {
         </div>
 
         {feedback && <div className="feedback-banner" role="status">{feedback}</div>}
-
-        <div className="card">
-          <h3>Notifications</h3>
-          {notifications.length === 0 ? (
-            <p>No notifications yet.</p>
-          ) : (
-            <ul className="notification-list">
-              {notifications.map((notification) => (
-                <li key={notification.id} className={notification.is_read ? "notification read" : "notification unread"}>
-                  <div>
-                    <strong>{notification.title}</strong>
-                    <p>{notification.message}</p>
-                  </div>
-                  {!notification.is_read && <button onClick={() => markRead(notification.id)}>Mark read</button>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
 
         <div className="card">
           <h3>Raise New Issue</h3>
@@ -250,17 +359,19 @@ function StudentDashboard() {
 
             <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={loading}>
               <option value="">Category</option>
-              <option>Electrical</option>
-              <option>Plumbing</option>
-              <option>Internet</option>
-              <option>Cleaning</option>
-              <option>Infrastructure</option>
+              {Object.values(APP_CONFIG.CATEGORIES).map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
             </select>
 
             <select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={loading}>
-              <option>Low</option>
-              <option>Medium</option>
-              <option>High</option>
+              {Object.values(APP_CONFIG.PRIORITIES).map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
 
             <div className="image-upload-section">
@@ -274,7 +385,7 @@ function StudentDashboard() {
               )}
             </div>
 
-            <button onClick={handleSubmit} disabled={loading}>
+            <button onClick={handleSubmit} disabled={loading} className="btn-primary">
               {loading ? "Submitting..." : "Submit Issue"}
             </button>
           </div>
@@ -310,12 +421,12 @@ function StudentDashboard() {
                     <td>{issue.id}</td>
                     <td>{issue.title}</td>
                     <td>{issue.category}</td>
-                    <td>{issue.priority || "Medium"}</td>
+                    <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                     <td>{issue.location}</td>
                     <td>
                       <span className={getStatusClass(issue.status)}>{issue.status}</span>
                     </td>
-                    <td>{issue.technician}</td>
+                    <td>{issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}</td>
                     <td>{new Date(issue.created_at).toLocaleString()}</td>
                     <td>
                       {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
@@ -336,7 +447,7 @@ function StudentDashboard() {
                       )}
                     </td>
                     <td>
-                      {issue.status === "Resolved" ? (
+                      {issue.status === APP_CONFIG.ISSUE_STATUSES.RESOLVED ? (
                         <div className="verification-actions">
                           <input
                             placeholder="Optional note"
@@ -350,13 +461,54 @@ function StudentDashboard() {
                             disabled={loading}
                           />
                           <div className="verification-buttons">
-                            <button disabled={loading} onClick={() => handleResolutionAction(issue.id, true)}>
+                            <button
+                              disabled={loading}
+                              onClick={() => handleResolutionAction(issue.id, true)}
+                              className="btn-confirm"
+                            >
                               Confirm
                             </button>
-                            <button disabled={loading} onClick={() => handleResolutionAction(issue.id, false)}>
+                            <button
+                              disabled={loading}
+                              onClick={() => handleResolutionAction(issue.id, false)}
+                              className="btn-reopen"
+                            >
                               Reopen
                             </button>
                           </div>
+                        </div>
+                      ) : issue.status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED ? (
+                        <div className="verification-actions">
+                          <div className="more-info-request">
+                            <p className="info-message">{issue.more_info_request}</p>
+                          </div>
+                          <input
+                            placeholder="Provide additional information"
+                            value={additionalInfo[issue.id] || ""}
+                            onChange={(e) =>
+                              setAdditionalInfo((prev) => ({
+                                ...prev,
+                                [issue.id]: e.target.value,
+                              }))
+                            }
+                            disabled={loading}
+                          />
+                          <label>
+                            Upload image (optional):
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleAdditionalImageSelect(e, issue.id)}
+                              disabled={loading}
+                            />
+                          </label>
+                          <button
+                            disabled={loading}
+                            onClick={() => handleSubmitAdditionalInfo(issue.id)}
+                            className="btn-submit-info"
+                          >
+                            Submit Info
+                          </button>
                         </div>
                       ) : (
                         "-"

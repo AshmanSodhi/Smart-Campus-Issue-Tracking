@@ -15,6 +15,7 @@ import {
   updateIssueStatus,
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
+import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
 import "./admin.css";
 
 function AdminDashboard() {
@@ -24,8 +25,10 @@ function AdminDashboard() {
   const [issues, setIssues] = useState([]);
   const [issueImages, setIssueImages] = useState({});
   const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [techApplications, setTechApplications] = useState([]);
-  const [technicians, setTechnicians] = useState(["Not Assigned"]);
+  const [technicians, setTechnicians] = useState([APP_CONFIG.DEFAULT_NOT_ASSIGNED]);
   const [userRoles, setUserRoles] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -35,7 +38,7 @@ function AdminDashboard() {
   const [lastStatusChange, setLastStatusChange] = useState(null);
 
   const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserRole, setNewUserRole] = useState("student");
+  const [newUserRole, setNewUserRole] = useState(APP_CONFIG.ROLES.STUDENT);
 
   const [filters, setFilters] = useState({
     status: "All",
@@ -45,12 +48,13 @@ function AdminDashboard() {
   });
 
   const statusFilterRef = useRef(null);
+  const notificationPanelRef = useRef(null);
 
   const metrics = useMemo(() => {
-    const pending = issues.filter((issue) => issue.status === "Pending").length;
-    const inProgress = issues.filter((issue) => issue.status === "In Progress").length;
-    const resolved = issues.filter((issue) => issue.status === "Resolved").length;
-    const closed = issues.filter((issue) => issue.status === "Closed").length;
+    const pending = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING).length;
+    const inProgress = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS).length;
+    const resolved = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.RESOLVED).length;
+    const closed = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED).length;
 
     return {
       total: issues.length,
@@ -62,7 +66,7 @@ function AdminDashboard() {
   }, [issues]);
 
   const pendingApplications = useMemo(
-    () => techApplications.filter((application) => (application.status || "").toLowerCase() === "pending"),
+    () => techApplications.filter((application) => application.status?.toLowerCase() === APP_CONFIG.TECH_APP_STATUS.PENDING),
     [techApplications]
   );
 
@@ -89,8 +93,10 @@ function AdminDashboard() {
         ]);
 
       setNotifications(fetchedNotifications);
+      const unreadCount = fetchedNotifications.filter((n) => !n.is_read).length;
+      setUnreadNotificationCount(unreadCount);
       setTechApplications(fetchedTechApplications);
-      setTechnicians(["Not Assigned", ...fetchedTechnicians]);
+      setTechnicians([APP_CONFIG.DEFAULT_NOT_ASSIGNED, ...fetchedTechnicians]);
       setUserRoles(fetchedUserRoles);
     } finally {
       setLoading(false);
@@ -113,11 +119,24 @@ function AdminDashboard() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (notificationPanelRef.current && !notificationPanelRef.current.contains(e.target)) {
+        setShowNotificationPanel(false);
+      }
+    };
+
+    if (showNotificationPanel) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotificationPanel]);
+
   const updateStatus = async (id, newStatus) => {
     const currentIssue = issues.find((issue) => issue.id === id);
     const previousStatus = currentIssue?.status;
 
-    if (newStatus === "Closed" && !window.confirm("Close this issue? You can undo this change.")) {
+    if (newStatus === APP_CONFIG.ISSUE_STATUSES.CLOSED && !window.confirm("Close this issue? You can undo this change.")) {
       return;
     }
 
@@ -130,19 +149,6 @@ function AdminDashboard() {
     }
 
     setFeedback(`Issue #${id} updated to ${newStatus}.`);
-    setLoading(false);
-  };
-
-  const undoLastStatusChange = async () => {
-    if (!lastStatusChange) {
-      return;
-    }
-
-    setLoading(true);
-    await updateIssueStatus(lastStatusChange.id, lastStatusChange.previousStatus);
-    await loadDashboard();
-    setFeedback(`Reverted issue #${lastStatusChange.id} to ${lastStatusChange.previousStatus}.`);
-    setLastStatusChange(null);
     setLoading(false);
   };
 
@@ -159,10 +165,10 @@ function AdminDashboard() {
     await loadDashboard();
   };
 
-  const handleReviewTechnician = async (applicationId, approve) => {
+  const handleReviewTechnician = async (applicationId, approve, reviewNote = "") => {
     setLoading(true);
     try {
-      await reviewTechnicianApplication(applicationId, approve);
+      await reviewTechnicianApplication(applicationId, approve, reviewNote);
       await loadDashboard();
       setFeedback(approve ? "Technician application approved." : "Technician application rejected.");
     } catch (error) {
@@ -206,11 +212,7 @@ function AdminDashboard() {
   };
 
   const getStatusClass = (status) => {
-    if (status === "Pending") return "status pending";
-    if (status === "In Progress") return "status inprogress";
-    if (status === "Resolved") return "status resolved";
-    if (status === "Closed") return "status closed";
-    return "status";
+    return `status ${getStatusBadgeClass(status)}`;
   };
 
   return (
@@ -254,17 +256,48 @@ function AdminDashboard() {
             <h1>Admin Dashboard</h1>
             <p className="helper-text">Shortcut: press / to jump to status filter.</p>
           </div>
+          {activeTab === "issues" && (
+            <div className="notification-bell-container" ref={notificationPanelRef}>
+              <button
+                className="notification-bell"
+                onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                title="View notifications"
+              >
+                🔔
+                {unreadNotificationCount > 0 && (
+                  <span className="notification-badge">{unreadNotificationCount}</span>
+                )}
+              </button>
+              {showNotificationPanel && (
+                <div className="notification-dropdown">
+                  <h4>Notifications</h4>
+                  {notifications.length === 0 ? (
+                    <p className="no-notifications">No notifications</p>
+                  ) : (
+                    <ul className="notification-list">
+                      {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
+                        <li
+                          key={notification.id}
+                          className={notification.is_read ? "notification read" : "notification unread"}
+                        >
+                          <div>
+                            <strong>{notification.title}</strong>
+                            <p>{notification.message}</p>
+                          </div>
+                          {!notification.is_read && (
+                            <button onClick={() => markRead(notification.id)}>✓</button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {feedback && <div className="feedback-banner">{feedback}</div>}
-        {lastStatusChange && activeTab === "issues" && (
-          <div className="feedback-banner warning" role="status">
-            Last update can be reversed.
-            <button className="ghost-action" onClick={undoLastStatusChange} disabled={loading}>
-              Undo Status Change
-            </button>
-          </div>
-        )}
 
         {activeTab === "issues" && (
           <>
@@ -288,30 +321,6 @@ function AdminDashboard() {
             </div>
 
             <div className="card">
-              <h3>Notifications</h3>
-              {notifications.length === 0 ? (
-                <p>No notifications yet.</p>
-              ) : (
-                <ul className="notification-list">
-                  {notifications.map((notification) => (
-                    <li
-                      key={notification.id}
-                      className={notification.is_read ? "notification read" : "notification unread"}
-                    >
-                      <div>
-                        <strong>{notification.title}</strong>
-                        <p>{notification.message}</p>
-                      </div>
-                      {!notification.is_read && (
-                        <button onClick={() => markRead(notification.id)}>Mark read</button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="card">
               <h3>Filters</h3>
               <div className="filters-row">
                 <select
@@ -321,10 +330,9 @@ function AdminDashboard() {
                   aria-label="Filter by issue status"
                 >
                   <option>All</option>
-                  <option>Pending</option>
-                  <option>In Progress</option>
-                  <option>Resolved</option>
-                  <option>Closed</option>
+                  {Object.values(APP_CONFIG.ISSUE_STATUSES).map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
                 </select>
 
                 <select
@@ -344,11 +352,9 @@ function AdminDashboard() {
                   aria-label="Filter by category"
                 >
                   <option>All</option>
-                  <option>Electrical</option>
-                  <option>Plumbing</option>
-                  <option>Internet</option>
-                  <option>Cleaning</option>
-                  <option>Infrastructure</option>
+                  {Object.values(APP_CONFIG.CATEGORIES).map((cat) => (
+                    <option key={cat}>{cat}</option>
+                  ))}
                 </select>
 
                 <select
@@ -357,9 +363,9 @@ function AdminDashboard() {
                   aria-label="Filter by priority"
                 >
                   <option>All</option>
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
+                  {Object.values(APP_CONFIG.PRIORITIES).map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -382,7 +388,6 @@ function AdminDashboard() {
                       <th>Status</th>
                       <th>Technician</th>
                       <th>Student Email</th>
-                      <th>Feedback</th>
                       <th>Images</th>
                       <th>Assign Technician</th>
                       <th>Change Status</th>
@@ -394,14 +399,13 @@ function AdminDashboard() {
                         <td>{issue.id}</td>
                         <td>{issue.title}</td>
                         <td>{issue.category}</td>
-                        <td>{issue.priority || "Medium"}</td>
+                        <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                         <td>{issue.location}</td>
                         <td>
                           <span className={getStatusClass(issue.status)}>{issue.status}</span>
                         </td>
-                        <td>{issue.technician}</td>
+                        <td>{issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}</td>
                         <td>{issue.student_email}</td>
-                        <td>{issue.student_feedback || "-"}</td>
                         <td>
                           {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
                             <div className="image-gallery">
@@ -422,7 +426,7 @@ function AdminDashboard() {
                         </td>
                         <td>
                           <select
-                            value={issue.technician || "Not Assigned"}
+                            value={issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}
                             onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
                             disabled={loading}
                           >
@@ -436,11 +440,11 @@ function AdminDashboard() {
                             value={issue.status}
                             onChange={(e) => updateStatus(issue.id, e.target.value)}
                             disabled={loading}
+                            className="status-select"
                           >
-                            <option>Pending</option>
-                            <option>In Progress</option>
-                            <option>Resolved</option>
-                            <option>Closed</option>
+                            {Object.values(APP_CONFIG.ISSUE_STATUSES).map((status) => (
+                              <option key={status}>{status}</option>
+                            ))}
                           </select>
                         </td>
                       </tr>
@@ -473,7 +477,7 @@ function AdminDashboard() {
                 </thead>
                 <tbody>
                   {techApplications.map((application) => {
-                    const isPending = (application.status || "").toLowerCase() === "pending";
+                    const isPending = application.status?.toLowerCase() === APP_CONFIG.TECH_APP_STATUS.PENDING;
                     return (
                       <tr key={application.id}>
                         <td>{application.full_name}</td>
@@ -481,19 +485,20 @@ function AdminDashboard() {
                         <td>{application.department}</td>
                         <td>{application.phone}</td>
                         <td>{application.reason}</td>
-                        <td>{application.status}</td>
+                        <td className={`app-status ${application.status}`}>{application.status}</td>
                         <td>{new Date(application.created_at).toLocaleString()}</td>
                         <td className="review-actions">
                           <button
                             onClick={() => handleReviewTechnician(application.id, true)}
                             disabled={loading || !isPending}
+                            className="btn-approve"
                           >
                             Approve
                           </button>
                           <button
-                            className="reject"
                             onClick={() => handleReviewTechnician(application.id, false)}
                             disabled={loading || !isPending}
+                            className="btn-reject"
                           >
                             Reject
                           </button>
@@ -521,11 +526,11 @@ function AdminDashboard() {
                     required
                   />
                   <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
-                    <option value="student">student</option>
-                    <option value="technician">technician</option>
-                    <option value="admin">admin</option>
+                    <option value={APP_CONFIG.ROLES.STUDENT}>student</option>
+                    <option value={APP_CONFIG.ROLES.TECHNICIAN}>technician</option>
+                    <option value={APP_CONFIG.ROLES.ADMIN}>admin</option>
                   </select>
-                  <button type="submit" disabled={dbManagementLoading}>
+                  <button type="submit" disabled={dbManagementLoading} className="btn-primary">
                     {dbManagementLoading ? "Saving..." : "Save Role"}
                   </button>
                 </div>
@@ -553,7 +558,7 @@ function AdminDashboard() {
                         <td>{row.email}</td>
                         <td>{row.role}</td>
                         <td>
-                          <button onClick={() => handleDeleteRole(row.email)} disabled={dbManagementLoading}>
+                          <button onClick={() => handleDeleteRole(row.email)} disabled={dbManagementLoading} className="btn-delete">
                             Delete
                           </button>
                         </td>
@@ -582,3 +587,4 @@ function AdminDashboard() {
 }
 
 export default AdminDashboard;
+

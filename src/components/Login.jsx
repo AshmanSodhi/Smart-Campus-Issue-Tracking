@@ -210,6 +210,10 @@ function Login() {
 
           <div className="login-info">
             Use Google for student access. Admin/technician access requires database role + password auth.
+            <br />
+            <button className="link-btn"onClick={() => navigate("/register")}>
+              Apply for Technician Access (Dedicated Form)
+            </button>
           </div>
         </section>
       </div>

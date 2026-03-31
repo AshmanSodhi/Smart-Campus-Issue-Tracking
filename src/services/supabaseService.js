@@ -957,3 +957,132 @@ export async function adminDeleteUserRole(email) {
   if (error) throw error;
   return true;
 }
+
+// ============ MORE INFO NEEDED FUNCTIONS ============
+
+export async function requestMoreInfo(issueId, infoRequest, technicianEmail = null) {
+  try {
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email")
+      .eq("id", issueId)
+      .single();
+
+    const updatePayload = {
+      status: "More Info Needed",
+      more_info_request: infoRequest,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    if (error) {
+      console.error("Error requesting more info:", error);
+      return null;
+    }
+
+    if (currentIssue?.student_email) {
+      await createNotificationForEmail(currentIssue.student_email, {
+        issueId,
+        title: "More information needed",
+        message: `Issue #${issueId}: ${infoRequest}`,
+      });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
+
+export async function submitAdditionalInfo(issueId, additionalInfo) {
+  try {
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email, technician")
+      .eq("id", issueId)
+      .single();
+
+    const updatePayload = {
+      status: "In Progress",
+      additional_info: additionalInfo,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    if (error) {
+      console.error("Error submitting additional info:", error);
+      return null;
+    }
+
+    if (currentIssue?.technician && currentIssue.technician !== "Not Assigned") {
+      await createNotificationForEmail(currentIssue.technician, {
+        issueId,
+        title: "Student provided additional information",
+        message: `Issue #${issueId}: Student submitted the requested information.`,
+      });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
+
+// ============ TECHNICIAN SUBMISSION FUNCTIONS ============
+
+export async function submitTechnicianWork(issueId, workDescription, submissionImageUrl = null) {
+  try {
+    const updatePayload = {
+      status: "Resolved",
+      resolution_notes: workDescription,
+      resolved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (submissionImageUrl) {
+      updatePayload.submission_image_url = submissionImageUrl;
+    }
+
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email")
+      .eq("id", issueId)
+      .single();
+
+    const { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    if (error) {
+      console.error("Error submitting technician work:", error);
+      return null;
+    }
+
+    if (currentIssue?.student_email) {
+      await createNotificationForEmail(currentIssue.student_email, {
+        issueId,
+        title: "Your issue has been resolved",
+        message: `Issue #${issueId} has been resolved. Please confirm if the problem is fixed.`,
+      });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
