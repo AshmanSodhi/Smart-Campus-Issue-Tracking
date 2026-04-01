@@ -267,6 +267,85 @@ export async function initializeAuthFromSession() {
   return portalRole;
 }
 
+function getPasswordResetRedirectUrl() {
+  const configuredUrl = import.meta.env.VITE_PASSWORD_RESET_REDIRECT_URL;
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+  return `${window.location.origin}/reset-password`;
+}
+
+export async function requestPasswordReset(emailInput) {
+  const email = (emailInput || "").trim().toLowerCase();
+  if (!email) {
+    throw new Error("Email is required.");
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: getPasswordResetRedirectUrl(),
+  });
+
+  if (error) {
+    console.error("[Auth] Password reset request failed:", error);
+    throw new Error(error.message || "Unable to send reset email.");
+  }
+
+  return true;
+}
+
+export async function establishRecoverySessionFromUrl() {
+  const hash = window.location.hash || "";
+  const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+
+  const hashErrorDescription = hashParams.get("error_description");
+  if (hashErrorDescription) {
+    throw new Error(decodeURIComponent(hashErrorDescription));
+  }
+
+  const accessToken = hashParams.get("access_token");
+  const refreshToken = hashParams.get("refresh_token");
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      console.error("[Auth] Could not establish recovery session:", error);
+      throw new Error(error.message || "Invalid or expired reset link.");
+    }
+
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error("[Auth] Could not read recovery session:", error);
+    throw new Error(error.message || "Unable to validate reset link.");
+  }
+
+  return Boolean(data?.session?.user);
+}
+
+export async function updateCurrentUserPassword(newPasswordInput) {
+  const newPassword = (newPasswordInput || "").trim();
+  if (!newPassword) {
+    throw new Error("New password is required.");
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    console.error("[Auth] Password update failed:", error);
+    throw new Error(error.message || "Unable to update password.");
+  }
+
+  return data;
+}
+
 export function getRole() {
   return normalizePortalRole(localStorage.getItem("userRole"));
 }

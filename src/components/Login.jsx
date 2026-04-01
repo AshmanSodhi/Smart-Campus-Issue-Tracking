@@ -160,6 +160,9 @@ function Login() {
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
           />
+          <button className="link-btn" type="button" onClick={() => navigate("/forgot-password")}>
+            Forgot password?
+          </button>
           <button className="secondary" onClick={handleEmailPasswordLogin} disabled={loading}>
             Login with Email + Password
           </button>
