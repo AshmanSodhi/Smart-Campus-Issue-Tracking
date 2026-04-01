@@ -115,6 +115,18 @@
   font-size: 0.92rem;
 }
 
+.feedback-banner.success {
+  background: #ecf8f2;
+  border-color: #b9e5cd;
+  color: #0c714c;
+}
+
+.feedback-banner.error {
+  background: #fdecec;
+  border-color: #f2c4c6;
+  color: #b42328;
+}
+
 .card {
   background: #fff;
   padding: 18px;

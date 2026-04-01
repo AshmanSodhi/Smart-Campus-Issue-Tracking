@@ -226,6 +226,18 @@
   gap: 10px;
 }
 
+.feedback-banner.success {
+  background: #ecf8f2;
+  border-color: #b9e5cd;
+  color: #0c714c;
+}
+
+.feedback-banner.error {
+  background: #fdecec;
+  border-color: #f2c4c6;
+  color: #b42328;
+}
+
 .feedback-banner.warning {
   background: #fff8e8;
   border-color: #f0d79c;

@@ -144,6 +144,18 @@ function AdminDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setFeedback("");
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
   const updateStatus = async (id, newStatus) => {
     const currentIssue = issues.find((issue) => issue.id === id);
     const previousStatus = currentIssue?.status;
@@ -267,6 +279,8 @@ function AdminDashboard() {
     return `status ${getStatusBadgeClass(status)}`;
   };
 
+  const isErrorFeedback = /(unable|failed|error|invalid|cannot|please)/i.test(feedback);
+
   const allTechnicianEmails = useMemo(() => {
     return [
       APP_CONFIG.DEFAULT_NOT_ASSIGNED,
@@ -380,7 +394,11 @@ function AdminDashboard() {
             </div>
           </div>
 
-          {feedback && <div className="feedback-banner admin-centered-banner">{feedback}</div>}
+          {feedback && (
+            <div className={`feedback-banner admin-centered-banner ${isErrorFeedback ? "error" : "success"}`}>
+              {feedback}
+            </div>
+          )}
           {lastStatusChange && activeTab === "issues" && (
             <div className="feedback-banner warning admin-centered-banner" role="status">
               Last update can be reversed.

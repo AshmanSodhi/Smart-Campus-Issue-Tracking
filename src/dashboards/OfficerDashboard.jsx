@@ -63,6 +63,18 @@ function OfficerDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showNotificationPanel]);
 
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setFeedback("");
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
   const loadIssues = async () => {
     setLoading(true);
     const fetchedIssues = await getOfficerIssues();
@@ -258,6 +270,8 @@ function OfficerDashboard() {
     return `status ${getStatusBadgeClass(status)}`;
   };
 
+  const isErrorFeedback = /(unable|failed|error|invalid|cannot|please)/i.test(feedback);
+
   const pendingCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING).length;
   const inProgressCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS).length;
   const moreInfoCount = issues.filter((issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED).length;
@@ -355,7 +369,11 @@ function OfficerDashboard() {
           </article>
         </div>
 
-        {feedback && <div className="feedback-banner" role="status">{feedback}</div>}
+        {feedback && (
+          <div className={`feedback-banner ${isErrorFeedback ? "error" : "success"}`} role="status">
+            {feedback}
+          </div>
+        )}
         {lastStatusChange && (
           <div className="feedback-banner warning" role="status">
             Last update can be reversed. (Feature coming soon)

@@ -76,6 +76,18 @@ function CitizenDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showNotificationPanel]);
 
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setFeedback("");
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
   const loadDashboard = async () => {
     setLoading(true);
     const fetchedIssues = await getCitizenIssues();
@@ -241,6 +253,8 @@ function CitizenDashboard() {
     return `status ${getStatusBadgeClass(status)}`;
   };
 
+  const isErrorFeedback = /(unable|failed|error|invalid|cannot|please)/i.test(feedback);
+
   const pendingCount = issues.filter(
     (issue) => issue.status === APP_CONFIG.ISSUE_STATUSES.PENDING
   ).length;
@@ -338,7 +352,11 @@ function CitizenDashboard() {
           </article>
         </div>
 
-        {feedback && <div className="feedback-banner" role="status">{feedback}</div>}
+        {feedback && (
+          <div className={`feedback-banner ${isErrorFeedback ? "error" : "success"}`} role="status">
+            {feedback}
+          </div>
+        )}
 
         <div className="card">
           <h3>Raise New Issue</h3>
