@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   APP_CONFIG,
   isAllowedIssueTransition,
+  normalizeIssueStatus,
   normalizeDatabaseRole,
   normalizePortalRole,
 } from "../config/appConfig";
@@ -18,6 +19,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DB_ROLES = APP_CONFIG.DB_ROLES;
 const ISSUE_STATUSES = APP_CONFIG.ISSUE_STATUSES;
+
+const normalizeIssueRowStatus = (issue) => {
+  const normalizedStatus = normalizeIssueStatus(issue?.status);
+  if (!normalizedStatus) {
+    return issue;
+  }
+
+  return {
+    ...issue,
+    status: normalizedStatus,
+  };
+};
 
 function getEmailDomain(email) {
   return ((email || "").split("@")[1] || "").toLowerCase();
@@ -569,7 +582,7 @@ export async function getTechnicianIssues() {
       return [];
     }
 
-    return data || [];
+    return (data || []).map(normalizeIssueRowStatus);
   } catch (error) {
     console.error("Error fetching technician issues:", error);
     return [];
@@ -1210,11 +1223,16 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
 
 export async function submitTechnicianWork(issueId, workDescription, submissionImageUrl = null) {
   try {
-    const updatePayload = {
+    const baseUpdatePayload = {
       status: ISSUE_STATUSES.RESOLVED,
-      resolution_notes: workDescription,
       resolved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    };
+
+    // Prefer current schema column name and keep a compatibility fallback.
+    const updatePayload = {
+      ...baseUpdatePayload,
+      completion_note: workDescription,
     };
 
     if (submissionImageUrl) {
@@ -1227,11 +1245,28 @@ export async function submitTechnicianWork(issueId, workDescription, submissionI
       .eq("id", issueId)
       .single();
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("issues")
       .update(updatePayload)
       .eq("id", issueId)
       .select();
+
+    if (error && error.code === "42703") {
+      const legacyPayload = {
+        ...baseUpdatePayload,
+        resolution_notes: workDescription,
+      };
+
+      if (submissionImageUrl) {
+        legacyPayload.submission_image_url = submissionImageUrl;
+      }
+
+      ({ data, error } = await supabase
+        .from("issues")
+        .update(legacyPayload)
+        .eq("id", issueId)
+        .select());
+    }
 
     if (error) {
       console.error("Error submitting technician work:", error);

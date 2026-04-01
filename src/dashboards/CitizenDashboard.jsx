@@ -263,30 +263,35 @@ function CitizenDashboard() {
       </div>
 
       <div className="main-content">
-        <div className="header">
+        <div className="header citizen-header">
           <div>
             <p className="breadcrumbs">Home / Citizen / Dashboard</p>
             <h1>Citizen Dashboard</h1>
             <p className="helper-text">Shortcut: press Alt + N to jump to the new issue form.</p>
           </div>
-          <div className="notification-bell-container" ref={notificationPanelRef}>
+          <div className="header-tools" ref={notificationPanelRef}>
             <button
-              className="notification-bell"
+              className="notification-icon-button"
               onClick={() => setShowNotificationPanel(!showNotificationPanel)}
               title="View notifications"
             >
-              🔔
+              <span className="notification-bell">🔔</span>
               {unreadNotificationCount > 0 && (
                 <span className="notification-badge">{unreadNotificationCount}</span>
               )}
             </button>
             {showNotificationPanel && (
-              <div className="notification-dropdown">
-                <h4>Notifications</h4>
+              <div className="notification-popover">
+                <div className="notification-popover-header">
+                  <h3>Notifications</h3>
+                  {unreadNotificationCount > 0 && (
+                    <span>{unreadNotificationCount} unread</span>
+                  )}
+                </div>
                 {notifications.length === 0 ? (
-                  <p className="no-notifications">No notifications</p>
+                  <p className="notification-empty">No notifications</p>
                 ) : (
-                  <ul className="notification-list">
+                  <ul className="notification-list compact">
                     {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
                       <li
                         key={notification.id}

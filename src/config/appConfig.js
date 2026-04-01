@@ -98,6 +98,28 @@ export const APP_CONFIG = {
   NOTIFICATION_DISPLAY_COUNT: 5,
 };
 
+const normalizeStatusKey = (status) => {
+  if (typeof status !== "string") {
+    return "";
+  }
+
+  return status
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+};
+
+const ISSUE_STATUS_LOOKUP = Object.values(APP_CONFIG.ISSUE_STATUSES).reduce((lookup, value) => {
+  lookup[normalizeStatusKey(value)] = value;
+  return lookup;
+}, {});
+
+export const normalizeIssueStatus = (status) => {
+  const normalizedKey = normalizeStatusKey(status);
+  return ISSUE_STATUS_LOOKUP[normalizedKey] || null;
+};
+
 // Helper functions for status checks
 export const isStatusEqual = (status1, status2) => {
   return status1?.toLowerCase() === status2?.toLowerCase();
@@ -160,12 +182,15 @@ export const normalizeDatabaseRole = (role) => {
 };
 
 export const isAllowedIssueTransition = (fromStatus, toStatus) => {
-  if (!fromStatus || !toStatus) {
+  const normalizedFromStatus = normalizeIssueStatus(fromStatus);
+  const normalizedToStatus = normalizeIssueStatus(toStatus);
+
+  if (!normalizedFromStatus || !normalizedToStatus) {
     return false;
   }
-  if (fromStatus === toStatus) {
+  if (normalizedFromStatus === normalizedToStatus) {
     return true;
   }
-  const allowedTargets = APP_CONFIG.ISSUE_TRANSITIONS[fromStatus] || [];
-  return allowedTargets.includes(toStatus);
+  const allowedTargets = APP_CONFIG.ISSUE_TRANSITIONS[normalizedFromStatus] || [];
+  return allowedTargets.includes(normalizedToStatus);
 };

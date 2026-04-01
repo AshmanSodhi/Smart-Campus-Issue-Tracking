@@ -12,7 +12,12 @@ import {
   uploadIssueImage,
   saveImageReference,
 } from "../services/supabaseService";
-import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
+import {
+  APP_CONFIG,
+  getStatusBadgeClass,
+  isAllowedIssueTransition,
+  normalizeIssueStatus,
+} from "../config/appConfig";
 import "./admin.css";
 
 function OfficerDashboard() {
@@ -59,7 +64,12 @@ function OfficerDashboard() {
   const loadIssues = async () => {
     setLoading(true);
     const fetchedIssues = await getOfficerIssues();
-    setIssues(fetchedIssues);
+    setIssues(
+      (fetchedIssues || []).map((issue) => ({
+        ...issue,
+        status: normalizeIssueStatus(issue.status) || issue.status,
+      }))
+    );
 
     for (const issue of fetchedIssues) {
       const images = await getIssueImages(issue.id);
@@ -78,19 +88,36 @@ function OfficerDashboard() {
   };
 
   const handleStatusChange = async (issue, status) => {
-    if (status === APP_CONFIG.ISSUE_STATUSES.RESOLVED) {
+    const nextStatus = normalizeIssueStatus(status);
+    if (!nextStatus) {
+      setFeedback("Invalid status selected.");
+      return;
+    }
+
+    if (
+      nextStatus === APP_CONFIG.ISSUE_STATUSES.PENDING &&
+      normalizeIssueStatus(issue.status) !== APP_CONFIG.ISSUE_STATUSES.PENDING
+    ) {
+      setFeedback("Technicians cannot move issues back to Pending.");
+      return;
+    }
+
+    if (nextStatus === APP_CONFIG.ISSUE_STATUSES.RESOLVED) {
       setShowSubmissionModal(issue.id);
       return;
     }
 
-    if (status === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED) {
+    if (nextStatus === APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED) {
       setShowMoreInfoModal(issue.id);
       return;
     }
 
     setLoading(true);
-    await updateIssueStatusSimple(issue, status);
-    setLoading(false);
+    try {
+      await updateIssueStatusSimple(issue, nextStatus);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateIssueStatusSimple = async (issue, status) => {
@@ -98,12 +125,37 @@ function OfficerDashboard() {
       return;
     }
 
-    await updateIssueStatus(issue.id, status);
-    await loadIssues();
-    if (issue.status !== status) {
-      setLastStatusChange({ id: issue.id, previousStatus: issue.status });
+    try {
+      const updateResult = await updateIssueStatus(issue.id, status);
+      if (!updateResult || updateResult.length === 0) {
+        setFeedback(`Unable to move issue #${issue.id} to ${status}. Please try again.`);
+        return;
+      }
+
+      await loadIssues();
+      if (issue.status !== status) {
+        setLastStatusChange({ id: issue.id, previousStatus: issue.status });
+      }
+      setFeedback(`Issue #${issue.id} moved to ${status}.`);
+    } catch (error) {
+      setFeedback(error.message || "Failed to update issue status.");
     }
-    setFeedback(`Issue #${issue.id} moved to ${status}.`);
+  };
+
+  const getAllowedStatusOptions = (currentStatus) => {
+    const normalizedCurrentStatus = normalizeIssueStatus(currentStatus);
+    if (!normalizedCurrentStatus) {
+      return Object.values(APP_CONFIG.ISSUE_STATUSES);
+    }
+
+    return Object.values(APP_CONFIG.ISSUE_STATUSES).filter(
+      (candidateStatus) =>
+        // Technicians should not be able to move issues back to Pending.
+        (candidateStatus === APP_CONFIG.ISSUE_STATUSES.PENDING
+          ? candidateStatus === normalizedCurrentStatus
+          : candidateStatus === normalizedCurrentStatus ||
+            isAllowedIssueTransition(normalizedCurrentStatus, candidateStatus))
+    );
   };
 
   const handleSubmitWork = async (issueId) => {
@@ -125,7 +177,11 @@ function OfficerDashboard() {
         }
       }
 
-      await submitTechnicianWork(issueId, description, imageUrl);
+      const submitResult = await submitTechnicianWork(issueId, description, imageUrl);
+      if (!submitResult || submitResult.length === 0) {
+        setFeedback(`Unable to submit work for issue #${issueId}. Please try again.`);
+        return;
+      }
 
       setSubmissionForms((prev) => ({ ...prev, [issueId]: { description: "" } }));
       setSubmissionImages((prev) => ({ ...prev, [issueId]: null }));
@@ -220,50 +276,55 @@ function OfficerDashboard() {
       </div>
 
       <div className="main-content">
-        <div className="header">
-          <div>
-            <p className="breadcrumbs">Home / Officer / Assigned Issues</p>
-            <h1>Government Officer Dashboard</h1>
-            <p className="helper-text">Submit your work with optional completion images and request more info when needed.</p>
-          </div>
-          <div className="notification-bell-container" ref={notificationPanelRef}>
-            <button
-              className="notification-bell"
-              onClick={() => setShowNotificationPanel(!showNotificationPanel)}
-              title="View notifications"
-            >
-              🔔
-              {unreadNotificationCount > 0 && (
-                <span className="notification-badge">{unreadNotificationCount}</span>
-              )}
-            </button>
-            {showNotificationPanel && (
-              <div className="notification-dropdown">
-                <h4>Notifications</h4>
-                {notifications.length === 0 ? (
-                  <p className="no-notifications">No notifications</p>
-                ) : (
-                  <ul className="notification-list">
-                    {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
-                      <li
-                        key={notification.id}
-                        className={notification.is_read ? "notification read" : "notification unread"}
-                      >
-                        <div>
-                          <strong>{notification.title}</strong>
-                          <p>{notification.message}</p>
-                        </div>
-                        {!notification.is_read && (
-                          <button onClick={() => markRead(notification.id)}>✓</button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+          <div className="header admin-header">
+            <div>
+              <p className="breadcrumbs">Home / Officer / Assigned Issues</p>
+              <h1>Government Officer Dashboard</h1>
+              <p className="helper-text">Submit your work with optional completion images and request more info when needed.</p>
+            </div>
+            <div className="header-tools" ref={notificationPanelRef}>
+              <button
+                className="notification-icon-button"
+                onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                title="View notifications"
+              >
+                <span className="notification-bell">🔔</span>
+                {unreadNotificationCount > 0 && (
+                  <span className="notification-badge">{unreadNotificationCount}</span>
                 )}
-              </div>
-            )}
+              </button>
+              {showNotificationPanel && (
+                <div className="notification-popover">
+                  <div className="notification-popover-header">
+                    <h3>Notifications</h3>
+                    {unreadNotificationCount > 0 && (
+                      <span>{unreadNotificationCount} unread</span>
+                    )}
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="notification-empty">No notifications</p>
+                  ) : (
+                    <ul className="notification-list compact">
+                      {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
+                        <li
+                          key={notification.id}
+                          className={notification.is_read ? "notification read" : "notification unread"}
+                        >
+                          <div>
+                            <strong>{notification.title}</strong>
+                            <p>{notification.message}</p>
+                          </div>
+                          {!notification.is_read && (
+                            <button onClick={() => markRead(notification.id)}>✓</button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
         <div className="metrics-row" aria-label="Officer summary">
           <article className="metric-card">
@@ -349,16 +410,16 @@ function OfficerDashboard() {
                       <select
                         id={`statusSelect-${issue.id}`}
                         name={`statusSelect-${issue.id}`}
-                        value={issue.status}
+                        value={normalizeIssueStatus(issue.status) || APP_CONFIG.ISSUE_STATUSES.PENDING}
                         onChange={(e) => handleStatusChange(issue, e.target.value)}
                         disabled={loading || issue.status === APP_CONFIG.ISSUE_STATUSES.CLOSED}
                         className="status-select"
                       >
-                        <option>{APP_CONFIG.ISSUE_STATUSES.PENDING}</option>
-                        <option>{APP_CONFIG.ISSUE_STATUSES.IN_PROGRESS}</option>
-                        <option>{APP_CONFIG.ISSUE_STATUSES.MORE_INFO_NEEDED}</option>
-                        <option>{APP_CONFIG.ISSUE_STATUSES.RESOLVED}</option>
-                        <option>{APP_CONFIG.ISSUE_STATUSES.CLOSED}</option>
+                        {getAllowedStatusOptions(issue.status).map((statusOption) => (
+                          <option key={statusOption} value={statusOption}>
+                            {statusOption}
+                          </option>
+                        ))}
                       </select>
                     </td>
                   </tr>
