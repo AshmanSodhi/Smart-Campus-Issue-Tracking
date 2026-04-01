@@ -12,7 +12,13 @@ import {
   uploadIssueImage,
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
-import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
+import {
+  APP_CONFIG,
+  getIssueCategoryDepartment,
+  getIssueCategoryLabel,
+  getIssueCategoryOptions,
+  getStatusBadgeClass,
+} from "../config/appConfig";
 import "./citizen.css";
 
 function CitizenDashboard() {
@@ -292,7 +298,7 @@ function CitizenDashboard() {
                   <p className="notification-empty">No notifications</p>
                 ) : (
                   <ul className="notification-list compact">
-                    {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
+                    {notifications.map((notification) => (
                       <li
                         key={notification.id}
                         className={notification.is_read ? "notification read" : "notification unread"}
@@ -367,12 +373,14 @@ function CitizenDashboard() {
 
             <select id="issueCategory" name="issueCategory" value={category} onChange={(e) => setCategory(e.target.value)} disabled={loading}>
               <option value="">Category</option>
-              {Object.values(APP_CONFIG.CATEGORIES).map((cat) => (
+              {getIssueCategoryOptions().map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>
               ))}
             </select>
+
+            {category && <p className="helper-text">Department: {getIssueCategoryDepartment(category)}</p>}
 
             <select id="issuePriority" name="issuePriority" value={priority} onChange={(e) => setPriority(e.target.value)} disabled={loading}>
               {Object.values(APP_CONFIG.PRIORITIES).map((p) => (
@@ -407,16 +415,20 @@ function CitizenDashboard() {
           ) : issues.length === 0 ? (
             <p>No issues submitted yet.</p>
           ) : (
-            <table>
+            <div className="table-scroll">
+              <table>
               <thead>
                 <tr>
                   <th>ID</th>
                   <th>Title</th>
                   <th>Category</th>
+                  <th>Department</th>
                   <th>Priority</th>
                   <th>Location</th>
                   <th>Status</th>
                   <th>Assigned Officer</th>
+                  <th>Submission Note</th>
+                  <th>Your Feedback</th>
                   <th>Created</th>
                   <th>Images</th>
                   <th>Citizen Action</th>
@@ -428,13 +440,16 @@ function CitizenDashboard() {
                   <tr key={issue.id}>
                     <td>{issue.id}</td>
                     <td>{issue.title}</td>
-                    <td>{issue.category}</td>
+                    <td>{getIssueCategoryLabel(issue.category)}</td>
+                    <td>{getIssueCategoryDepartment(issue.category)}</td>
                     <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                     <td>{issue.location}</td>
                     <td>
                       <span className={getStatusClass(issue.status)}>{issue.status}</span>
                     </td>
                     <td>{issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}</td>
+                    <td>{issue.completion_note || issue.resolution_notes || "-"}</td>
+                    <td>{issue.student_feedback || "-"}</td>
                     <td>{new Date(issue.created_at).toLocaleString()}</td>
                     <td>
                       {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
@@ -525,7 +540,8 @@ function CitizenDashboard() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
         </div>
       </div>

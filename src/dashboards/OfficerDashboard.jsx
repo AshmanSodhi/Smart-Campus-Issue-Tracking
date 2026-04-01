@@ -14,6 +14,8 @@ import {
 } from "../services/supabaseService";
 import {
   APP_CONFIG,
+  getIssueCategoryDepartment,
+  getIssueCategoryLabel,
   getStatusBadgeClass,
   isAllowedIssueTransition,
   normalizeIssueStatus,
@@ -189,7 +191,7 @@ function OfficerDashboard() {
       setShowSubmissionModal(null);
 
       await loadIssues();
-      setFeedback(`Work submitted for issue #${issueId}. Student will verify the resolution.`);
+      setFeedback(`Work submitted for issue #${issueId}. Citizen will verify the resolution.`);
     } catch (error) {
       setFeedback(error.message || "Failed to submit work.");
     } finally {
@@ -207,11 +209,15 @@ function OfficerDashboard() {
 
     setLoading(true);
     try {
-      await requestMoreInfo(issueId, request);
+      const requestResult = await requestMoreInfo(issueId, request);
+      if (!requestResult || requestResult.length === 0) {
+        setFeedback(`Unable to request more information for issue #${issueId}.`);
+        return;
+      }
       setMoreInfoForms((prev) => ({ ...prev, [issueId]: { request: "" } }));
       setShowMoreInfoModal(null);
       await loadIssues();
-      setFeedback(`More information requested for issue #${issueId}. Student will be notified.`);
+      setFeedback(`More information requested for issue #${issueId}. Citizen will be notified.`);
     } catch (error) {
       setFeedback(error.message || "Failed to request more information.");
     } finally {
@@ -305,7 +311,7 @@ function OfficerDashboard() {
                     <p className="notification-empty">No notifications</p>
                   ) : (
                     <ul className="notification-list compact">
-                      {notifications.slice(0, APP_CONFIG.NOTIFICATION_DISPLAY_COUNT).map((notification) => (
+                      {notifications.map((notification) => (
                         <li
                           key={notification.id}
                           className={notification.is_read ? "notification read" : "notification unread"}
@@ -363,16 +369,21 @@ function OfficerDashboard() {
           ) : issues.length === 0 ? (
             <p>No issues assigned yet.</p>
           ) : (
-            <table>
+            <div className="table-scroll">
+              <table>
               <thead>
                 <tr>
                   <th>ID</th>
                   <th>Title</th>
                   <th>Category</th>
+                  <th>Department</th>
                   <th>Priority</th>
                   <th>Location</th>
                   <th>Status</th>
                   <th>Citizen</th>
+                  <th>Citizen Note</th>
+                  <th>Submission Note</th>
+                  <th>Citizen Feedback</th>
                   <th>Images</th>
                   <th>Actions</th>
                 </tr>
@@ -382,13 +393,17 @@ function OfficerDashboard() {
                   <tr key={issue.id}>
                     <td>{issue.id}</td>
                     <td>{issue.title}</td>
-                    <td>{issue.category}</td>
+                    <td>{getIssueCategoryLabel(issue.category)}</td>
+                    <td>{getIssueCategoryDepartment(issue.category)}</td>
                     <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                     <td>{issue.location}</td>
                     <td>
                       <span className={getStatusClass(issue.status)}>{issue.status}</span>
                     </td>
                     <td>{issue.student_email}</td>
+                    <td>{issue.additional_info || "-"}</td>
+                    <td>{issue.completion_note || issue.resolution_notes || "-"}</td>
+                    <td>{issue.student_feedback || "-"}</td>
                     <td>
                       {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
                         <div className="image-gallery">
@@ -425,7 +440,8 @@ function OfficerDashboard() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
         </div>
       </div>

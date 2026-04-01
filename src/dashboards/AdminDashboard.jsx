@@ -5,7 +5,7 @@ import {
   assignTechnician,
   getAllIssues,
   getAllUserRoles,
-  getAssignableTechnicians,
+  getAssignableTechnicianProfiles,
   getIssueImages,
   getNotifications,
   getTechnicianApplications,
@@ -16,7 +16,14 @@ import {
   updateIssueStatus,
 } from "../services/supabaseService";
 import { useNavigate } from "react-router-dom";
-import { APP_CONFIG, getStatusBadgeClass } from "../config/appConfig";
+import {
+  APP_CONFIG,
+  getIssueCategoryDepartment,
+  getIssueCategoryLabel,
+  getIssueCategoryOptions,
+  normalizeDepartmentName,
+  getStatusBadgeClass,
+} from "../config/appConfig";
 import "./admin.css";
 
 function AdminDashboard() {
@@ -27,7 +34,7 @@ function AdminDashboard() {
   const [issueImages, setIssueImages] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [techApplications, setTechApplications] = useState([]);
-  const [technicians, setTechnicians] = useState([APP_CONFIG.DEFAULT_NOT_ASSIGNED]);
+  const [technicians, setTechnicians] = useState([]);
   const [userRoles, setUserRoles] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -97,13 +104,13 @@ function AdminDashboard() {
         await Promise.all([
           getNotifications(),
           getTechnicianApplications("all"),
-          getAssignableTechnicians(),
+          getAssignableTechnicianProfiles(),
           getAllUserRoles(),
         ]);
 
       setNotifications(fetchedNotifications);
       setTechApplications(fetchedTechApplications);
-      setTechnicians([APP_CONFIG.DEFAULT_NOT_ASSIGNED, ...fetchedTechnicians]);
+      setTechnicians(fetchedTechnicians);
       setUserRoles(fetchedUserRoles);
     } finally {
       setLoading(false);
@@ -152,13 +159,23 @@ function AdminDashboard() {
       }
 
       setLoading(true);
-      await requestMoreInfo(id, infoRequest.trim());
-      await loadDashboard();
-      if (previousStatus && previousStatus !== newStatus) {
-        setLastStatusChange({ id, previousStatus });
+      try {
+        const requestResult = await requestMoreInfo(id, infoRequest.trim());
+        if (!requestResult || requestResult.length === 0) {
+          setFeedback(`Unable to request more information for issue #${id}.`);
+          return;
+        }
+
+        await loadDashboard();
+        if (previousStatus && previousStatus !== newStatus) {
+          setLastStatusChange({ id, previousStatus });
+        }
+        setFeedback(`Issue #${id} moved to ${newStatus}.`);
+      } catch (error) {
+        setFeedback(error.message || `Unable to request more information for issue #${id}.`);
+      } finally {
+        setLoading(false);
       }
-      setFeedback(`Issue #${id} moved to ${newStatus}.`);
-      setLoading(false);
       return;
     }
 
@@ -248,6 +265,28 @@ function AdminDashboard() {
 
   const getStatusClass = (status) => {
     return `status ${getStatusBadgeClass(status)}`;
+  };
+
+  const allTechnicianEmails = useMemo(() => {
+    return [
+      APP_CONFIG.DEFAULT_NOT_ASSIGNED,
+      ...Array.from(new Set(technicians.map((technician) => technician.email))),
+    ];
+  }, [technicians]);
+
+  const getAssignableTechnicianEmailsForIssue = (issue) => {
+    const issueDepartment = normalizeDepartmentName(getIssueCategoryDepartment(issue.category));
+    const selectedTechnician = (issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED).toString().trim();
+
+    if (!issueDepartment) {
+      return Array.from(new Set([...allTechnicianEmails, selectedTechnician]));
+    }
+
+    const filteredEmails = technicians
+      .filter((technician) => normalizeDepartmentName(technician.department) === issueDepartment)
+      .map((technician) => technician.email);
+
+    return Array.from(new Set([APP_CONFIG.DEFAULT_NOT_ASSIGNED, ...filteredEmails, selectedTechnician]));
   };
 
   return (
@@ -396,7 +435,7 @@ function AdminDashboard() {
                       aria-label="Filter by technician"
                     >
                       <option>All</option>
-                      {technicians.map((tech) => (
+                      {allTechnicianEmails.map((tech) => (
                         <option key={tech}>{tech}</option>
                       ))}
                     </select>
@@ -407,7 +446,7 @@ function AdminDashboard() {
                       aria-label="Filter by category"
                     >
                       <option>All</option>
-                      {Object.values(APP_CONFIG.CATEGORIES).map((category) => (
+                      {getIssueCategoryOptions().map((category) => (
                         <option key={category}>{category}</option>
                       ))}
                     </select>
@@ -441,12 +480,15 @@ function AdminDashboard() {
                             <th>ID</th>
                             <th>Title</th>
                             <th>Category</th>
+                            <th>Department</th>
                             <th>Priority</th>
                             <th>Location</th>
                             <th>Status</th>
                             <th>Technician</th>
-                            <th>Student Email</th>
-                            <th>Feedback</th>
+                            <th>Citizen Email</th>
+                            <th>Citizen Note</th>
+                            <th>Submission Note</th>
+                            <th>Citizen Feedback</th>
                             <th>Images</th>
                             <th>Assign Technician</th>
                             <th>Change Status</th>
@@ -457,7 +499,8 @@ function AdminDashboard() {
                             <tr key={issue.id}>
                               <td>{issue.id}</td>
                               <td>{issue.title}</td>
-                              <td>{issue.category}</td>
+                              <td>{getIssueCategoryLabel(issue.category)}</td>
+                              <td>{getIssueCategoryDepartment(issue.category)}</td>
                               <td>{issue.priority || APP_CONFIG.PRIORITIES.MEDIUM}</td>
                               <td>{issue.location}</td>
                               <td>
@@ -465,6 +508,8 @@ function AdminDashboard() {
                               </td>
                               <td>{issue.technician || APP_CONFIG.DEFAULT_NOT_ASSIGNED}</td>
                               <td>{issue.student_email}</td>
+                              <td>{issue.additional_info || "-"}</td>
+                              <td>{issue.completion_note || issue.resolution_notes || "-"}</td>
                               <td>{issue.student_feedback || "-"}</td>
                               <td>
                                 {issueImages[issue.id] && issueImages[issue.id].length > 0 ? (
@@ -490,7 +535,7 @@ function AdminDashboard() {
                                   onChange={(e) => handleAssignTechnician(issue.id, e.target.value)}
                                   disabled={loading}
                                 >
-                                  {technicians.map((tech) => (
+                                  {getAssignableTechnicianEmailsForIssue(issue).map((tech) => (
                                     <option key={tech}>{tech}</option>
                                   ))}
                                 </select>
@@ -592,7 +637,7 @@ function AdminDashboard() {
                         required
                       />
                       <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}>
-                        <option value={APP_CONFIG.DB_ROLES.STUDENT}>{APP_CONFIG.DB_ROLES.STUDENT}</option>
+                        <option value={APP_CONFIG.DB_ROLES.STUDENT}>{APP_CONFIG.ROLES.CITIZEN}</option>
                         <option value={APP_CONFIG.DB_ROLES.TECHNICIAN}>{APP_CONFIG.DB_ROLES.TECHNICIAN}</option>
                         <option value={APP_CONFIG.DB_ROLES.ADMIN}>{APP_CONFIG.DB_ROLES.ADMIN}</option>
                       </select>

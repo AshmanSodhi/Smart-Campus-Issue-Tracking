@@ -1,6 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   APP_CONFIG,
+  getDepartmentIssueCategoryFilterValues,
+  getIssueCategoryFilterValues,
+  getIssueCategoryLabel,
+  normalizeDepartmentName,
+  normalizeIssueCategory,
   isAllowedIssueTransition,
   normalizeIssueStatus,
   normalizeDatabaseRole,
@@ -19,29 +24,131 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DB_ROLES = APP_CONFIG.DB_ROLES;
 const ISSUE_STATUSES = APP_CONFIG.ISSUE_STATUSES;
+const DEFAULT_TECHNICIAN = APP_CONFIG.DEFAULT_NOT_ASSIGNED;
+
+const normalizeTechnicianToken = (value) =>
+  (value || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+const isDefaultTechnicianPlaceholder = (value) => {
+  return normalizeTechnicianToken(value) === normalizeTechnicianToken(DEFAULT_TECHNICIAN);
+};
+
+const normalizeTechnicianAssignment = (value) => {
+  const rawValue = (value || "").toString().trim();
+  if (!rawValue || isDefaultTechnicianPlaceholder(rawValue)) {
+    return DEFAULT_TECHNICIAN;
+  }
+
+  if (rawValue.includes("@")) {
+    return rawValue.toLowerCase();
+  }
+
+  return rawValue;
+};
 
 const normalizeIssueRowStatus = (issue) => {
   const normalizedStatus = normalizeIssueStatus(issue?.status);
-  if (!normalizedStatus) {
-    return issue;
-  }
+  const normalizedCategory = normalizeIssueCategory(issue?.category);
 
   return {
     ...issue,
-    status: normalizedStatus,
+    status: normalizedStatus || issue?.status,
+    category: normalizedCategory || issue?.category,
+    technician: normalizeTechnicianAssignment(issue?.technician),
   };
 };
 
-function getEmailDomain(email) {
-  return ((email || "").split("@")[1] || "").toLowerCase();
+async function getDepartmentFromUserRoleProfile(email) {
+  try {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("department")
+      .eq("email", email)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01" || error.code === "42703") {
+        return null;
+      }
+      console.error("Error fetching department from user_roles:", error);
+      return null;
+    }
+
+    return (data?.department || "").trim() || null;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
 }
 
-function isAllowedInstitutionalDomain(email) {
-  const allowedDomain = APP_CONFIG.AUTH.ALLOWED_GOOGLE_DOMAIN;
-  if (!allowedDomain) {
-    return true;
+async function getDepartmentFromTechnicianApplication(email) {
+  try {
+    const { data, error } = await supabase
+      .from("technician_applications")
+      .select("department")
+      .eq("email", email)
+      .eq("status", APP_CONFIG.TECH_APP_STATUS.APPROVED)
+      .order("reviewed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01" || error.code === "42703") {
+        return null;
+      }
+      console.error("Error fetching department from technician applications:", error);
+      return null;
+    }
+
+    return (data?.department || "").trim() || null;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
   }
-  return getEmailDomain(email) === allowedDomain;
+}
+
+async function getCurrentDepartmentScope() {
+  const email = (getEmail() || "").trim().toLowerCase();
+  const role = getRole();
+  if (!email || !role) {
+    return null;
+  }
+
+  const departmentFromRoleProfile = await getDepartmentFromUserRoleProfile(email);
+  if (departmentFromRoleProfile) {
+    return departmentFromRoleProfile;
+  }
+
+  if (role === APP_CONFIG.ROLES.OFFICER) {
+    return getDepartmentFromTechnicianApplication(email);
+  }
+
+  return null;
+}
+
+async function applyDepartmentScopeToIssueQuery(query) {
+  const role = getRole();
+  if (role !== APP_CONFIG.ROLES.ADMIN && role !== APP_CONFIG.ROLES.OFFICER) {
+    return query;
+  }
+
+  const department = await getCurrentDepartmentScope();
+  if (!department) {
+    return query;
+  }
+
+  const categoryValues = getDepartmentIssueCategoryFilterValues(department);
+  if (!categoryValues.length) {
+    return query;
+  }
+
+  return query.in("category", categoryValues);
 }
 
 // ============ AUTH FUNCTIONS ============
@@ -159,10 +266,7 @@ async function resolveRoleByEmail(email) {
 
 async function isAllowedGoogleAccount(email) {
   const role = await resolveRoleByEmail(email);
-  if (role === DB_ROLES.STUDENT) {
-    return isAllowedInstitutionalDomain(email);
-  }
-  return role === DB_ROLES.ADMIN || role === DB_ROLES.TECHNICIAN;
+  return role === DB_ROLES.STUDENT || role === DB_ROLES.ADMIN || role === DB_ROLES.TECHNICIAN;
 }
 
 export async function signInWithGoogle() {
@@ -172,7 +276,6 @@ export async function signInWithGoogle() {
       redirectTo: window.location.origin,
       queryParams: {
         prompt: "select_account",
-        hd: APP_CONFIG.AUTH.ALLOWED_GOOGLE_DOMAIN,
       },
     },
   });
@@ -214,16 +317,10 @@ export async function loginWithEmailAndPassword(emailInput, passwordInput) {
     throw new Error("Unable to resolve your role. Contact admin.");
   }
 
-  if (role === DB_ROLES.STUDENT && !isAllowedInstitutionalDomain(sessionEmail)) {
-    await supabase.auth.signOut();
-    clearLocalAuth();
-    throw new Error(`Only ${APP_CONFIG.AUTH.ALLOWED_GOOGLE_DOMAIN} accounts are allowed.`);
-  }
-
   if (role === DB_ROLES.STUDENT) {
     await supabase.auth.signOut();
     clearLocalAuth();
-    throw new Error("Students can only login with Google OAuth.");
+    throw new Error("Citizens can only login with Google OAuth.");
   }
 
   localStorage.setItem("userRole", normalizePortalRole(role) || role);
@@ -363,17 +460,22 @@ export function getCurrentUserProfile() {
   return { email, role };
 }
 
-export async function getAssignableTechnicians() {
+export async function getAssignableTechnicianProfiles() {
   let dbMapped = [];
 
   try {
     const { data, error } = await supabase
       .from("user_roles")
-      .select("email")
+      .select("email, department")
       .eq("role", DB_ROLES.TECHNICIAN);
 
     if (!error) {
-      dbMapped = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
+      dbMapped = (data || [])
+        .map((row) => ({
+          email: normalizeTechnicianAssignment(row.email),
+          department: normalizeDepartmentName(row.department) || row.department || null,
+        }))
+        .filter((row) => Boolean(row.email) && row.email.includes("@"));
     } else if (error.code !== "42P01") {
       console.error("Error fetching technician roles:", error);
     }
@@ -384,23 +486,48 @@ export async function getAssignableTechnicians() {
   try {
     const { data, error } = await supabase
       .from("technician_applications")
-      .select("email")
+      .select("email, department")
       .eq("status", APP_CONFIG.TECH_APP_STATUS.APPROVED);
 
     if (error) {
       if (error.code === "42P01") {
-        return Array.from(new Set([...dbMapped]));
+        return dbMapped;
       }
       console.error("Error fetching approved technicians:", error);
-      return Array.from(new Set([...dbMapped]));
+      return dbMapped;
     }
 
-    const approved = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
-    return Array.from(new Set([...dbMapped, ...approved]));
+    const approved = (data || [])
+      .map((row) => ({
+        email: normalizeTechnicianAssignment(row.email),
+        department: normalizeDepartmentName(row.department) || row.department || null,
+      }))
+      .filter((row) => Boolean(row.email) && row.email.includes("@"));
+
+    const merged = new Map();
+
+    [...dbMapped, ...approved].forEach((technician) => {
+      const existing = merged.get(technician.email);
+      if (!existing) {
+        merged.set(technician.email, technician);
+        return;
+      }
+
+      if (!existing.department && technician.department) {
+        merged.set(technician.email, technician);
+      }
+    });
+
+    return Array.from(merged.values()).sort((a, b) => a.email.localeCompare(b.email));
   } catch (err) {
     console.error("Error:", err);
-    return Array.from(new Set([...dbMapped]));
+    return dbMapped;
   }
+}
+
+export async function getAssignableTechnicians() {
+  const profiles = await getAssignableTechnicianProfiles();
+  return profiles.map((profile) => profile.email);
 }
 
 export async function submitTechnicianApplication(application) {
@@ -536,6 +663,7 @@ export async function submitIssue(issueData) {
   try {
     const { title, description, location, category, priority } = issueData;
     const studentEmail = getEmail();
+    const canonicalCategory = getIssueCategoryLabel(category);
 
     if (!studentEmail) {
       console.error("[submitIssue] ERROR: Email not found in localStorage!");
@@ -546,7 +674,7 @@ export async function submitIssue(issueData) {
       title,
       description,
       location,
-      category,
+      category: canonicalCategory,
       priority: priority || APP_CONFIG.PRIORITIES.MEDIUM,
       status: ISSUE_STATUSES.PENDING,
       technician: APP_CONFIG.DEFAULT_NOT_ASSIGNED,
@@ -571,7 +699,7 @@ export async function submitIssue(issueData) {
       await createNotificationForRole(DB_ROLES.ADMIN, {
         issueId: data[0].id,
         title: "New issue raised",
-        message: `${studentEmail} raised a new ${category} issue.`,
+        message: `${studentEmail} raised a new ${canonicalCategory} issue.`,
       });
     }
 
@@ -597,9 +725,9 @@ export async function getStudentIssues() {
       return [];
     }
 
-    return data || [];
+    return (data || []).map(normalizeIssueRowStatus);
   } catch (error) {
-    console.error("Error fetching student issues:", error);
+    console.error("Error fetching citizen issues:", error);
     return [];
   }
 }
@@ -616,6 +744,8 @@ export async function getAllIssues(filters = {}) {
       .select("*")
       .order("created_at", { ascending: false });
 
+    query = await applyDepartmentScopeToIssueQuery(query);
+
     if (status && status !== "All") {
       query = query.eq("status", status);
     }
@@ -623,7 +753,7 @@ export async function getAllIssues(filters = {}) {
       query = query.eq("technician", technician);
     }
     if (category && category !== "All") {
-      query = query.eq("category", category);
+      query = query.in("category", getIssueCategoryFilterValues(category));
     }
     if (priority && priority !== "All") {
       query = query.eq("priority", priority);
@@ -636,7 +766,7 @@ export async function getAllIssues(filters = {}) {
       return [];
     }
 
-    return data || [];
+    return (data || []).map(normalizeIssueRowStatus);
   } catch (err) {
     console.error("Error:", err);
     return [];
@@ -661,7 +791,19 @@ export async function getTechnicianIssues() {
       return [];
     }
 
-    return (data || []).map(normalizeIssueRowStatus);
+    const normalizedIssues = (data || []).map(normalizeIssueRowStatus);
+    const department = await getCurrentDepartmentScope();
+
+    if (!department) {
+      return normalizedIssues;
+    }
+
+    const allowedCategories = new Set(getDepartmentIssueCategoryFilterValues(department));
+    if (!allowedCategories.size) {
+      return normalizedIssues;
+    }
+
+    return normalizedIssues.filter((issue) => allowedCategories.has(issue.category));
   } catch (error) {
     console.error("Error fetching technician issues:", error);
     return [];
@@ -757,7 +899,7 @@ export async function assignTechnician(issueId, technicianName) {
       .eq("id", issueId)
       .single();
 
-    const assignedTechnician = (technicianName || APP_CONFIG.DEFAULT_NOT_ASSIGNED).trim();
+    const assignedTechnician = normalizeTechnicianAssignment(technicianName);
     const shouldAutoStart =
       assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
       currentIssue?.status === ISSUE_STATUSES.PENDING;
@@ -870,10 +1012,10 @@ export async function confirmResolution(issueId, confirmed, note = "") {
 
     await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
-      title: "Student response received",
+      title: "Citizen response received",
       message: confirmed
-        ? `Issue #${issueId} was confirmed and closed by the student.${feedbackSuffix}`
-        : `Issue #${issueId} was reopened by the student.${feedbackSuffix}`,
+        ? `Issue #${issueId} was confirmed and closed by the citizen.${feedbackSuffix}`
+        : `Issue #${issueId} was reopened by the citizen.${feedbackSuffix}`,
     });
 
     if (isAssigned) {
@@ -900,7 +1042,7 @@ export async function autoCloseResolvedIssues(days = APP_CONFIG.AUTO_CLOSE_DAYS)
       .from("issues")
       .update({
         status: ISSUE_STATUSES.CLOSED,
-        student_feedback: "Auto-closed after no student response.",
+        student_feedback: "Auto-closed after no citizen response.",
         closed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -935,7 +1077,7 @@ export async function autoCloseResolvedIssues(days = APP_CONFIG.AUTO_CLOSE_DAYS)
       await createNotificationForRole(DB_ROLES.ADMIN, {
         issueId: issue.id,
         title: "Issue auto-closed",
-        message: `Issue #${issue.id} was auto-closed after ${days} days without student confirmation.`,
+        message: `Issue #${issue.id} was auto-closed after ${days} days without citizen confirmation.`,
       });
     }
 
@@ -1226,15 +1368,31 @@ export async function requestMoreInfo(issueId, infoRequest, technicianEmail = nu
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("issues")
       .update(updatePayload)
       .eq("id", issueId)
       .select();
 
+    // Backward compatibility: some schemas do not have more_info_request.
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase
+        .from("issues")
+        .update({
+          status: ISSUE_STATUSES.MORE_INFO_NEEDED,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", issueId)
+        .select());
+    }
+
     if (error) {
       console.error("Error requesting more info:", error);
-      return null;
+      throw new Error(error.message || `Unable to request more information for issue #${issueId}.`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(`Unable to request more information for issue #${issueId}.`);
     }
 
     if (currentIssue?.student_email) {
@@ -1248,12 +1406,13 @@ export async function requestMoreInfo(issueId, infoRequest, technicianEmail = nu
     return data;
   } catch (err) {
     console.error("Error:", err);
-    return null;
+    throw new Error(err.message || `Unable to request more information for issue #${issueId}.`);
   }
 }
 
 export async function submitAdditionalInfo(issueId, additionalInfo) {
   try {
+    const trimmedInfo = (additionalInfo || "").trim();
     const { data: currentIssue } = await supabase
       .from("issues")
       .select("student_email, technician")
@@ -1266,35 +1425,55 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("issues")
       .update(updatePayload)
       .eq("id", issueId)
       .select();
 
+    // Backward compatibility: some schemas do not have additional_info.
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase
+        .from("issues")
+        .update({
+          status: ISSUE_STATUSES.IN_PROGRESS,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", issueId)
+        .select());
+    }
+
     if (error) {
       console.error("Error submitting additional info:", error);
-      return null;
+      throw new Error(error.message || `Unable to submit additional information for issue #${issueId}.`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(`Unable to submit additional information for issue #${issueId}.`);
     }
 
     if (currentIssue?.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
       await createNotificationForEmail(currentIssue.technician, {
         issueId,
-        title: "Student provided additional information",
-        message: `Issue #${issueId}: Student submitted the requested information.`,
+        title: "Citizen provided additional information",
+        message: trimmedInfo
+          ? `Issue #${issueId}: ${trimmedInfo}`
+          : `Issue #${issueId}: Citizen submitted the requested information.`,
       });
     }
 
     await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
       title: "Additional information submitted",
-      message: `Issue #${issueId} received additional information from the student.`,
+      message: trimmedInfo
+        ? `Issue #${issueId}: ${trimmedInfo}`
+        : `Issue #${issueId} received additional information from the citizen.`,
     });
 
     return data;
   } catch (err) {
     console.error("Error:", err);
-    return null;
+    throw new Error(err.message || `Unable to submit additional information for issue #${issueId}.`);
   }
 }
 
@@ -1302,6 +1481,7 @@ export async function submitAdditionalInfo(issueId, additionalInfo) {
 
 export async function submitTechnicianWork(issueId, workDescription, submissionImageUrl = null) {
   try {
+    const noteText = (workDescription || "").trim();
     const baseUpdatePayload = {
       status: ISSUE_STATUSES.RESOLVED,
       resolved_at: new Date().toISOString(),
@@ -1356,14 +1536,16 @@ export async function submitTechnicianWork(issueId, workDescription, submissionI
       await createNotificationForEmail(currentIssue.student_email, {
         issueId,
         title: "Your issue has been resolved",
-        message: `Issue #${issueId} has been resolved. Please confirm if the problem is fixed.`,
+        message: noteText
+          ? `Issue #${issueId} has been resolved. Note from technician: ${noteText}`
+          : `Issue #${issueId} has been resolved. Please confirm if the problem is fixed.`,
       });
     }
 
     await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
       title: "Issue resolved by technician",
-      message: `Issue #${issueId} has been marked resolved and is awaiting student confirmation.`,
+      message: `Issue #${issueId} has been marked resolved and is awaiting citizen confirmation.`,
     });
 
     return data;
