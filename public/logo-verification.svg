@@ -1,0 +1,10 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hexagon background -->
+  <path d="M100 20 L160 50 L160 150 L100 180 L40 150 L40 50 Z" fill="#003B87" stroke="none"/>
+  
+  <!-- Checkmark -->
+  <path d="M60 100 L85 125 L140 70" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Cyan circle accent -->
+  <circle cx="155" cy="65" r="20" fill="#00D4FF"/>
+</svg>

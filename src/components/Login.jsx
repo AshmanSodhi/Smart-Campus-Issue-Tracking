@@ -6,6 +6,7 @@ import {
   signInWithGoogle,
   submitTechnicianApplication,
 } from "../services/supabaseService";
+import { APP_CONFIG, normalizePortalRole } from "../config/appConfig";
 import "./login.css";
 
 function Login() {
@@ -26,19 +27,28 @@ function Login() {
 
   const navigate = useNavigate();
 
+  const navigateForRole = (roleValue) => {
+    const role = normalizePortalRole(roleValue);
+    if (role === APP_CONFIG.ROLES.CITIZEN) {
+      navigate("/citizen");
+      return;
+    }
+    if (role === APP_CONFIG.ROLES.ADMIN) {
+      navigate("/admin");
+      return;
+    }
+    if (role === APP_CONFIG.ROLES.OFFICER) {
+      navigate("/officer");
+    }
+  };
+
   useEffect(() => {
     const restoreSession = async () => {
       try {
         const role = await initializeAuthFromSession();
-        if (role === "student") {
-          navigate("/student");
-        } else if (role === "admin") {
-          navigate("/admin");
-        } else if (role === "technician") {
-          navigate("/technician");
-        }
+        navigateForRole(role);
       } catch (error) {
-        setErrorMessage(error.message || "Login blocked: use your VIT student account.");
+        setErrorMessage(error.message || "Login blocked: please use your government account.");
       }
     };
 
@@ -61,13 +71,7 @@ function Login() {
     setErrorMessage("");
     try {
       const role = await loginWithEmailAndPassword(emailLoginInput, adminPassword);
-      if (role === "student") {
-        navigate("/student");
-      } else if (role === "admin") {
-        navigate("/admin");
-      } else if (role === "technician") {
-        navigate("/technician");
-      }
+      navigateForRole(role);
     } catch (error) {
       setErrorMessage(error.message || "Email/password login failed.");
     }
@@ -87,7 +91,7 @@ function Login() {
 
     try {
       await submitTechnicianApplication(techForm);
-      setRegistrationMessage("Application submitted. Admin approval is required before technician login.");
+      setRegistrationMessage("Application submitted. Admin approval is required before Government Officer login.");
       setTechForm({
         fullName: "",
         email: "",
@@ -96,7 +100,7 @@ function Login() {
         reason: "",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Technician registration failed.");
+      setErrorMessage(error.message || "Government Officer registration failed.");
     } finally {
       setRegistrationLoading(false);
     }
@@ -105,30 +109,34 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-shell">
-        <section className="login-showcase" aria-label="Smart Campus introduction">
-          <p className="showcase-kicker">Smart Campus</p>
+        <section className="login-showcase" aria-label="Government Issue Tracking introduction">
+          <div className="showcase-brand">
+            <img src="/logo-verification.svg" alt="Government Issue Tracking logo" className="showcase-logo" />
+            <span>{APP_CONFIG.APP_NAME}</span>
+          </div>
+          <p className="showcase-kicker">Government Issue Tracking</p>
           <h1>Issue Tracking and Resolution Hub</h1>
           <p>
-            Report issues, follow progress, and collaborate with your campus operations teams
+            Report issues, follow progress, and collaborate with government agencies
             from one workspace.
           </p>
           <div className="showcase-points">
             <span>Live status timeline</span>
-            <span>Student, Admin, Technician dashboards</span>
+            <span>Citizen, Admin, Government Officer dashboards</span>
             <span>Image-backed issue evidence</span>
           </div>
         </section>
 
-        <section className="login-card" aria-label="Sign in to Smart Campus">
+        <section className="login-card" aria-label="Sign in to Government Issue Tracking">
           <h2>Welcome Back</h2>
           <p className="login-subtitle">
-            Students must use Google OAuth. Admin and Technician can login with email and password.
+            Citizens must use Google OAuth. Admin and Government Officers can login with email and password.
           </p>
 
           <div className="portal-roles" aria-label="Portal role options">
-            <span>Student</span>
+            <span>Citizen</span>
             <span>Admin</span>
-            <span>Technician</span>
+            <span>Government Officer</span>
           </div>
 
           <button onClick={handleGoogleLogin} disabled={loading}>
@@ -137,17 +145,24 @@ function Login() {
 
           <div className="login-divider">or</div>
           <input
+            id="emailLoginInput"
+            name="emailLoginInput"
             type="email"
-            placeholder="Admin/Technician email"
+            placeholder="Admin/Government Officer email"
             value={emailLoginInput}
             onChange={(e) => setTestEmail(e.target.value)}
           />
           <input
+            id="adminPassword"
+            name="adminPassword"
             type="password"
             placeholder="Password"
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
           />
+          <button className="link-btn" type="button" onClick={() => navigate("/forgot-password")}>
+            Forgot password?
+          </button>
           <button className="secondary" onClick={handleEmailPasswordLogin} disabled={loading}>
             Login with Email + Password
           </button>
@@ -160,40 +175,50 @@ function Login() {
             onClick={() => setShowTechRegistration((prev) => !prev)}
             disabled={registrationLoading || loading}
           >
-            {showTechRegistration ? "Hide Technician Registration" : "Apply for Technician Access"}
+            {showTechRegistration ? "Hide Government Officer Registration" : "Apply for Government Officer Access"}
           </button>
 
           {showTechRegistration && (
             <div className="tech-registration-panel">
-              <h3>Technician Registration</h3>
-              <p>Submit your details. Admin approval is required before technician login access is enabled.</p>
+              <h3>Government Officer Registration</h3>
+              <p>Submit your details. Admin approval is required before officer login access is enabled.</p>
 
               <input
+                id="techFormFullName"
+                name="techFormFullName"
                 placeholder="Full Name"
                 value={techForm.fullName}
                 onChange={(e) => updateTechField("fullName", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormEmail"
+                name="techFormEmail"
                 placeholder="Email"
                 value={techForm.email}
                 onChange={(e) => updateTechField("email", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormDepartment"
+                name="techFormDepartment"
                 placeholder="Department"
                 value={techForm.department}
                 onChange={(e) => updateTechField("department", e.target.value)}
                 disabled={registrationLoading}
               />
               <input
+                id="techFormPhone"
+                name="techFormPhone"
                 placeholder="Phone Number"
                 value={techForm.phone}
                 onChange={(e) => updateTechField("phone", e.target.value)}
                 disabled={registrationLoading}
               />
               <textarea
-                placeholder="Why do you need technician access?"
+                id="techFormReason"
+                name="techFormReason"
+                placeholder="Why do you need officer access?"
                 value={techForm.reason}
                 onChange={(e) => updateTechField("reason", e.target.value)}
                 disabled={registrationLoading}
@@ -209,7 +234,11 @@ function Login() {
           )}
 
           <div className="login-info">
-            Use Google for student access. Admin/technician access requires database role + password auth.
+            Use Google for citizen access. Admin/officer access requires database role + password auth.
+            <br />
+            <button className="link-btn" onClick={() => navigate("/register")}>
+              Apply for Officer Access (Dedicated Form)
+            </button>
           </div>
         </section>
       </div>

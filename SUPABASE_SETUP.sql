@@ -1,4 +1,4 @@
--- Smart Campus - Supabase Database Setup
+-- Government Issue Tracking System - Supabase Database Setup
 -- Run these SQL commands in Supabase SQL Editor
 
 -- ============ CREATE ISSUES TABLE ============

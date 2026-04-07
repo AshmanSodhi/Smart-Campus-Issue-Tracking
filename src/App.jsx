@@ -1,20 +1,39 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import Login from "./components/Login";
+import Register from "./components/Register";
+import ForgotPassword from "./components/ForgotPassword";
+import ResetPassword from "./components/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
-import StudentDashboard from "./dashboards/StudentDashboard";
+import CitizenDashboard from "./dashboards/CitizenDashboard";
 import AdminDashboard from "./dashboards/AdminDashboard";
-import TechnicianDashboard from "./dashboards/TechnicianDashboard";
+import OfficerDashboard from "./dashboards/OfficerDashboard";
+import { autoCloseResolvedIssues } from "./services/supabaseService";
+import { APP_CONFIG } from "./config/appConfig";
 
 function App() {
+  const hasRunAutoCloseRef = useRef(false);
+
+  useEffect(() => {
+    if (hasRunAutoCloseRef.current) {
+      return;
+    }
+    hasRunAutoCloseRef.current = true;
+    autoCloseResolvedIssues(APP_CONFIG.AUTO_CLOSE_DAYS);
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
-          path="/student"
+          path="/citizen"
           element={(
-            <ProtectedRoute allowedRoles={["student"]}>
-              <StudentDashboard />
+            <ProtectedRoute allowedRoles={["citizen"]}>
+              <CitizenDashboard />
             </ProtectedRoute>
           )}
         />
@@ -27,10 +46,10 @@ function App() {
           )}
         />
         <Route
-          path="/technician"
+          path="/officer"
           element={(
-            <ProtectedRoute allowedRoles={["technician"]}>
-              <TechnicianDashboard />
+            <ProtectedRoute allowedRoles={["officer"]}>
+              <OfficerDashboard />
             </ProtectedRoute>
           )}
         />
@@ -40,6 +59,3 @@ function App() {
 }
 
 export default App;
-
-
-/* export default App; */

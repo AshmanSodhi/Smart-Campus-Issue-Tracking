@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { getRole, initializeAuthFromSession } from "../services/supabaseService";
+import { initializeAuthFromSession } from "../services/supabaseService";
+import { normalizePortalRole } from "../config/appConfig";
+import "./protected-route.css";
 
 function ProtectedRoute({ allowedRoles, children }) {
   const [authReady, setAuthReady] = useState(false);
@@ -9,15 +11,8 @@ function ProtectedRoute({ allowedRoles, children }) {
   useEffect(() => {
     const bootstrapAuth = async () => {
       try {
-        const cachedRole = getRole();
-        if (cachedRole) {
-          setRole(cachedRole);
-          setAuthReady(true);
-          return;
-        }
-
         const resolvedRole = await initializeAuthFromSession();
-        setRole(resolvedRole);
+        setRole(normalizePortalRole(resolvedRole));
       } catch {
         setRole(null);
       } finally {
@@ -29,7 +24,7 @@ function ProtectedRoute({ allowedRoles, children }) {
   }, []);
 
   if (!authReady) {
-    return <div style={{ padding: "24px", fontFamily: "Arial, sans-serif" }}>Checking session...</div>;
+    return <div className="auth-loading">Checking session...</div>;
   }
 
   if (!role || !allowedRoles.includes(role)) {

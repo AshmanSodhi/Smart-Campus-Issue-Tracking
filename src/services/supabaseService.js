@@ -1,18 +1,155 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  APP_CONFIG,
+  getDepartmentIssueCategoryFilterValues,
+  getIssueCategoryFilterValues,
+  getIssueCategoryLabel,
+  normalizeDepartmentName,
+  normalizeIssueCategory,
+  isAllowedIssueTransition,
+  normalizeIssueStatus,
+  normalizeDatabaseRole,
+  normalizePortalRole,
+} from "../config/appConfig";
 
 // Initialize Supabase client
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-console.log("[Supabase Init] URL:", SUPABASE_URL);
-console.log("[Supabase Init] Key exists:", !!SUPABASE_ANON_KEY);
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error("[Supabase] Missing credentials! Check .env.local");
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-console.log("[Supabase] Client initialized successfully");
+
+const DB_ROLES = APP_CONFIG.DB_ROLES;
+const ISSUE_STATUSES = APP_CONFIG.ISSUE_STATUSES;
+const DEFAULT_TECHNICIAN = APP_CONFIG.DEFAULT_NOT_ASSIGNED;
+
+const normalizeTechnicianToken = (value) =>
+  (value || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+const isDefaultTechnicianPlaceholder = (value) => {
+  return normalizeTechnicianToken(value) === normalizeTechnicianToken(DEFAULT_TECHNICIAN);
+};
+
+const normalizeTechnicianAssignment = (value) => {
+  const rawValue = (value || "").toString().trim();
+  if (!rawValue || isDefaultTechnicianPlaceholder(rawValue)) {
+    return DEFAULT_TECHNICIAN;
+  }
+
+  if (rawValue.includes("@")) {
+    return rawValue.toLowerCase();
+  }
+
+  return rawValue;
+};
+
+const normalizeIssueRowStatus = (issue) => {
+  const normalizedStatus = normalizeIssueStatus(issue?.status);
+  const normalizedCategory = normalizeIssueCategory(issue?.category);
+
+  return {
+    ...issue,
+    status: normalizedStatus || issue?.status,
+    category: normalizedCategory || issue?.category,
+    technician: normalizeTechnicianAssignment(issue?.technician),
+  };
+};
+
+async function getDepartmentFromUserRoleProfile(email) {
+  try {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("department")
+      .eq("email", email)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01" || error.code === "42703") {
+        return null;
+      }
+      console.error("Error fetching department from user_roles:", error);
+      return null;
+    }
+
+    return (data?.department || "").trim() || null;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
+
+async function getDepartmentFromTechnicianApplication(email) {
+  try {
+    const { data, error } = await supabase
+      .from("technician_applications")
+      .select("department")
+      .eq("email", email)
+      .eq("status", APP_CONFIG.TECH_APP_STATUS.APPROVED)
+      .order("reviewed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01" || error.code === "42703") {
+        return null;
+      }
+      console.error("Error fetching department from technician applications:", error);
+      return null;
+    }
+
+    return (data?.department || "").trim() || null;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
+}
+
+async function getCurrentDepartmentScope() {
+  const email = (getEmail() || "").trim().toLowerCase();
+  const role = getRole();
+  if (!email || !role) {
+    return null;
+  }
+
+  const departmentFromRoleProfile = await getDepartmentFromUserRoleProfile(email);
+  if (departmentFromRoleProfile) {
+    return departmentFromRoleProfile;
+  }
+
+  if (role === APP_CONFIG.ROLES.OFFICER) {
+    return getDepartmentFromTechnicianApplication(email);
+  }
+
+  return null;
+}
+
+async function applyDepartmentScopeToIssueQuery(query) {
+  const role = getRole();
+  if (role !== APP_CONFIG.ROLES.ADMIN && role !== APP_CONFIG.ROLES.OFFICER) {
+    return query;
+  }
+
+  const department = await getCurrentDepartmentScope();
+  if (!department) {
+    return query;
+  }
+
+  const categoryValues = getDepartmentIssueCategoryFilterValues(department);
+  if (!categoryValues.length) {
+    return query;
+  }
+
+  return query.in("category", categoryValues);
+}
 
 // ============ AUTH FUNCTIONS ============
 
@@ -22,10 +159,7 @@ function clearLocalAuth() {
 }
 
 function normalizeRole(role) {
-  if (role === "admin" || role === "technician" || role === "student") {
-    return role;
-  }
-  return null;
+  return normalizeDatabaseRole(role);
 }
 
 async function getRoleFromDatabase(email) {
@@ -92,7 +226,7 @@ async function isApprovedTechnicianEmail(email) {
       .from("technician_applications")
       .select("id")
       .eq("email", normalized)
-      .eq("status", "approved")
+      .eq("status", APP_CONFIG.TECH_APP_STATUS.APPROVED)
       .limit(1);
 
     if (error) {
@@ -122,17 +256,17 @@ async function resolveRoleByEmail(email) {
   }
 
   if (await isApprovedTechnicianEmail(normalized)) {
-    await upsertUserRole(normalized, "technician");
-    return "technician";
+    await upsertUserRole(normalized, DB_ROLES.TECHNICIAN);
+    return DB_ROLES.TECHNICIAN;
   }
 
-  await upsertUserRole(normalized, "student");
-  return "student";
+  await upsertUserRole(normalized, DB_ROLES.STUDENT);
+  return DB_ROLES.STUDENT;
 }
 
 async function isAllowedGoogleAccount(email) {
   const role = await resolveRoleByEmail(email);
-  return role === "student" || role === "admin" || role === "technician";
+  return role === DB_ROLES.STUDENT || role === DB_ROLES.ADMIN || role === DB_ROLES.TECHNICIAN;
 }
 
 export async function signInWithGoogle() {
@@ -183,15 +317,15 @@ export async function loginWithEmailAndPassword(emailInput, passwordInput) {
     throw new Error("Unable to resolve your role. Contact admin.");
   }
 
-  if (role === "student") {
+  if (role === DB_ROLES.STUDENT) {
     await supabase.auth.signOut();
     clearLocalAuth();
-    throw new Error("Students can only login with Google OAuth.");
+    throw new Error("Citizens can only login with Google OAuth.");
   }
 
-  localStorage.setItem("userRole", role);
+  localStorage.setItem("userRole", normalizePortalRole(role) || role);
   localStorage.setItem("userEmail", sessionEmail);
-  return role;
+  return normalizePortalRole(role) || role;
 }
 
 export async function initializeAuthFromSession() {
@@ -224,13 +358,93 @@ export async function initializeAuthFromSession() {
     return null;
   }
 
-  localStorage.setItem("userRole", role);
-  localStorage.setItem("userEmail", email);
-  return role;
+  const portalRole = normalizePortalRole(role) || role;
+  localStorage.setItem("userRole", portalRole);
+  localStorage.setItem("userEmail", email.toLowerCase());
+  return portalRole;
+}
+
+function getPasswordResetRedirectUrl() {
+  const configuredUrl = import.meta.env.VITE_PASSWORD_RESET_REDIRECT_URL;
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+  return `${window.location.origin}/reset-password`;
+}
+
+export async function requestPasswordReset(emailInput) {
+  const email = (emailInput || "").trim().toLowerCase();
+  if (!email) {
+    throw new Error("Email is required.");
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: getPasswordResetRedirectUrl(),
+  });
+
+  if (error) {
+    console.error("[Auth] Password reset request failed:", error);
+    throw new Error(error.message || "Unable to send reset email.");
+  }
+
+  return true;
+}
+
+export async function establishRecoverySessionFromUrl() {
+  const hash = window.location.hash || "";
+  const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+
+  const hashErrorDescription = hashParams.get("error_description");
+  if (hashErrorDescription) {
+    throw new Error(decodeURIComponent(hashErrorDescription));
+  }
+
+  const accessToken = hashParams.get("access_token");
+  const refreshToken = hashParams.get("refresh_token");
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      console.error("[Auth] Could not establish recovery session:", error);
+      throw new Error(error.message || "Invalid or expired reset link.");
+    }
+
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error("[Auth] Could not read recovery session:", error);
+    throw new Error(error.message || "Unable to validate reset link.");
+  }
+
+  return Boolean(data?.session?.user);
+}
+
+export async function updateCurrentUserPassword(newPasswordInput) {
+  const newPassword = (newPasswordInput || "").trim();
+  if (!newPassword) {
+    throw new Error("New password is required.");
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    console.error("[Auth] Password update failed:", error);
+    throw new Error(error.message || "Unable to update password.");
+  }
+
+  return data;
 }
 
 export function getRole() {
-  return localStorage.getItem("userRole");
+  return normalizePortalRole(localStorage.getItem("userRole"));
 }
 
 export function getEmail() {
@@ -246,14 +460,22 @@ export function getCurrentUserProfile() {
   return { email, role };
 }
 
-export async function getAssignableTechnicians() {
+export async function getAssignableTechnicianProfiles() {
   let dbMapped = [];
 
   try {
-    const { data, error } = await supabase.from("user_roles").select("email").eq("role", "technician");
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("email, department")
+      .eq("role", DB_ROLES.TECHNICIAN);
 
     if (!error) {
-      dbMapped = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
+      dbMapped = (data || [])
+        .map((row) => ({
+          email: normalizeTechnicianAssignment(row.email),
+          department: normalizeDepartmentName(row.department) || row.department || null,
+        }))
+        .filter((row) => Boolean(row.email) && row.email.includes("@"));
     } else if (error.code !== "42P01") {
       console.error("Error fetching technician roles:", error);
     }
@@ -264,23 +486,48 @@ export async function getAssignableTechnicians() {
   try {
     const { data, error } = await supabase
       .from("technician_applications")
-      .select("email")
-      .eq("status", "approved");
+      .select("email, department")
+      .eq("status", APP_CONFIG.TECH_APP_STATUS.APPROVED);
 
     if (error) {
       if (error.code === "42P01") {
-        return Array.from(new Set([...dbMapped]));
+        return dbMapped;
       }
       console.error("Error fetching approved technicians:", error);
-      return Array.from(new Set([...dbMapped]));
+      return dbMapped;
     }
 
-    const approved = (data || []).map((row) => (row.email || "").toLowerCase()).filter(Boolean);
-    return Array.from(new Set([...dbMapped, ...approved]));
+    const approved = (data || [])
+      .map((row) => ({
+        email: normalizeTechnicianAssignment(row.email),
+        department: normalizeDepartmentName(row.department) || row.department || null,
+      }))
+      .filter((row) => Boolean(row.email) && row.email.includes("@"));
+
+    const merged = new Map();
+
+    [...dbMapped, ...approved].forEach((technician) => {
+      const existing = merged.get(technician.email);
+      if (!existing) {
+        merged.set(technician.email, technician);
+        return;
+      }
+
+      if (!existing.department && technician.department) {
+        merged.set(technician.email, technician);
+      }
+    });
+
+    return Array.from(merged.values()).sort((a, b) => a.email.localeCompare(b.email));
   } catch (err) {
     console.error("Error:", err);
-    return Array.from(new Set([...dbMapped]));
+    return dbMapped;
   }
+}
+
+export async function getAssignableTechnicians() {
+  const profiles = await getAssignableTechnicianProfiles();
+  return profiles.map((profile) => profile.email);
 }
 
 export async function submitTechnicianApplication(application) {
@@ -295,7 +542,7 @@ export async function submitTechnicianApplication(application) {
   }
 
   const existingRole = await resolveRoleByEmail(email);
-  if (existingRole === "admin" || existingRole === "technician") {
+  if (existingRole === DB_ROLES.ADMIN || existingRole === DB_ROLES.TECHNICIAN) {
     throw new Error("This email already has elevated access.");
   }
 
@@ -308,7 +555,7 @@ export async function submitTechnicianApplication(application) {
         department,
         phone,
         reason,
-        status: "pending",
+        status: APP_CONFIG.TECH_APP_STATUS.PENDING,
       },
     ])
     .select();
@@ -321,7 +568,7 @@ export async function submitTechnicianApplication(application) {
     throw new Error("Failed to submit technician application.");
   }
 
-  await createNotificationForRole("admin", {
+  await createNotificationForRole(DB_ROLES.ADMIN, {
     title: "New technician registration",
     message: `${fullName} requested technician access (${email}).`,
   });
@@ -329,7 +576,7 @@ export async function submitTechnicianApplication(application) {
   return data?.[0] || null;
 }
 
-export async function getTechnicianApplications(status = "pending") {
+export async function getTechnicianApplications(status = APP_CONFIG.TECH_APP_STATUS.PENDING) {
   try {
     let query = supabase
       .from("technician_applications")
@@ -358,8 +605,8 @@ export async function getTechnicianApplications(status = "pending") {
 }
 
 export async function reviewTechnicianApplication(applicationId, approve, reviewNote = "") {
-  const adminEmail = getEmail() || "admin";
-  const status = approve ? "approved" : "rejected";
+  const adminEmail = getEmail() || DB_ROLES.ADMIN;
+  const status = approve ? APP_CONFIG.TECH_APP_STATUS.APPROVED : APP_CONFIG.TECH_APP_STATUS.REJECTED;
 
   try {
     const { data, error } = await supabase
@@ -384,7 +631,7 @@ export async function reviewTechnicianApplication(applicationId, approve, review
 
     if (data?.email) {
       if (approve) {
-        await upsertUserRole(data.email, "technician");
+        await upsertUserRole(data.email, DB_ROLES.TECHNICIAN);
       }
 
       await createNotificationForEmail(data.email, {
@@ -416,6 +663,7 @@ export async function submitIssue(issueData) {
   try {
     const { title, description, location, category, priority } = issueData;
     const studentEmail = getEmail();
+    const canonicalCategory = getIssueCategoryLabel(category);
 
     if (!studentEmail) {
       console.error("[submitIssue] ERROR: Email not found in localStorage!");
@@ -426,10 +674,10 @@ export async function submitIssue(issueData) {
       title,
       description,
       location,
-      category,
-      priority: priority || "Medium",
-      status: "Pending",
-      technician: "Not Assigned",
+      category: canonicalCategory,
+      priority: priority || APP_CONFIG.PRIORITIES.MEDIUM,
+      status: ISSUE_STATUSES.PENDING,
+      technician: APP_CONFIG.DEFAULT_NOT_ASSIGNED,
       student_email: studentEmail,
       created_at: new Date().toISOString(),
     };
@@ -448,10 +696,10 @@ export async function submitIssue(issueData) {
     }
 
     if (data?.[0]?.id) {
-      await createNotificationForRole("admin", {
+      await createNotificationForRole(DB_ROLES.ADMIN, {
         issueId: data[0].id,
         title: "New issue raised",
-        message: `${studentEmail} raised a new ${category} issue.`,
+        message: `${studentEmail} raised a new ${canonicalCategory} issue.`,
       });
     }
 
@@ -477,12 +725,15 @@ export async function getStudentIssues() {
       return [];
     }
 
-    return data || [];
-  } catch (err) {
-    console.error("Error:", err);
+    return (data || []).map(normalizeIssueRowStatus);
+  } catch (error) {
+    console.error("Error fetching citizen issues:", error);
     return [];
   }
 }
+
+// Alias for government system terminology
+export const getCitizenIssues = getStudentIssues;
 
 export async function getAllIssues(filters = {}) {
   try {
@@ -493,6 +744,8 @@ export async function getAllIssues(filters = {}) {
       .select("*")
       .order("created_at", { ascending: false });
 
+    query = await applyDepartmentScopeToIssueQuery(query);
+
     if (status && status !== "All") {
       query = query.eq("status", status);
     }
@@ -500,7 +753,7 @@ export async function getAllIssues(filters = {}) {
       query = query.eq("technician", technician);
     }
     if (category && category !== "All") {
-      query = query.eq("category", category);
+      query = query.in("category", getIssueCategoryFilterValues(category));
     }
     if (priority && priority !== "All") {
       query = query.eq("priority", priority);
@@ -513,7 +766,7 @@ export async function getAllIssues(filters = {}) {
       return [];
     }
 
-    return data || [];
+    return (data || []).map(normalizeIssueRowStatus);
   } catch (err) {
     console.error("Error:", err);
     return [];
@@ -538,37 +791,67 @@ export async function getTechnicianIssues() {
       return [];
     }
 
-    return data || [];
-  } catch (err) {
-    console.error("Error:", err);
+    const normalizedIssues = (data || []).map(normalizeIssueRowStatus);
+    const department = await getCurrentDepartmentScope();
+
+    if (!department) {
+      return normalizedIssues;
+    }
+
+    const allowedCategories = new Set(getDepartmentIssueCategoryFilterValues(department));
+    if (!allowedCategories.size) {
+      return normalizedIssues;
+    }
+
+    return normalizedIssues.filter((issue) => allowedCategories.has(issue.category));
+  } catch (error) {
+    console.error("Error fetching technician issues:", error);
     return [];
   }
 }
 
+// Alias for government system terminology
+export const getOfficerIssues = getTechnicianIssues;
+
 export async function updateIssueStatus(issueId, status, completionNote = null) {
   try {
+    const targetStatus = status;
+    const { data: currentIssue, error: currentIssueError } = await supabase
+      .from("issues")
+      .select("student_email, technician, status")
+      .eq("id", issueId)
+      .single();
+
+    if (currentIssueError) {
+      console.error("Error fetching issue for status update:", currentIssueError);
+      return null;
+    }
+
+    if (!isAllowedIssueTransition(currentIssue.status, targetStatus)) {
+      console.error(`Invalid issue transition: ${currentIssue.status} -> ${targetStatus}`);
+      return null;
+    }
+
     const updatePayload = {
-      status,
+      status: targetStatus,
       updated_at: new Date().toISOString(),
     };
 
-    if (status === "Resolved") {
+    if (targetStatus === ISSUE_STATUSES.RESOLVED) {
       updatePayload.resolved_at = new Date().toISOString();
       if (completionNote) {
         updatePayload.completion_note = completionNote;
       }
     }
 
-    if (status === "Pending" || status === "In Progress") {
+    if (targetStatus === ISSUE_STATUSES.PENDING || targetStatus === ISSUE_STATUSES.IN_PROGRESS) {
       updatePayload.resolved_at = null;
       updatePayload.closed_at = null;
     }
 
-    const { data: currentIssue } = await supabase
-      .from("issues")
-      .select("student_email")
-      .eq("id", issueId)
-      .single();
+    if (targetStatus === ISSUE_STATUSES.CLOSED) {
+      updatePayload.closed_at = new Date().toISOString();
+    }
 
     const { data, error } = await supabase
       .from("issues")
@@ -585,7 +868,19 @@ export async function updateIssueStatus(issueId, status, completionNote = null) 
       await createNotificationForEmail(currentIssue.student_email, {
         issueId,
         title: "Issue status updated",
-        message: `Issue #${issueId} moved to ${status}.`,
+        message: `Issue #${issueId} moved to ${targetStatus}.`,
+      });
+    }
+
+    if (
+      currentIssue?.technician &&
+      currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
+      targetStatus === ISSUE_STATUSES.CLOSED
+    ) {
+      await createNotificationForEmail(currentIssue.technician, {
+        issueId,
+        title: "Issue closed",
+        message: `Issue #${issueId} was closed.`,
       });
     }
 
@@ -600,13 +895,34 @@ export async function assignTechnician(issueId, technicianName) {
   try {
     const { data: currentIssue } = await supabase
       .from("issues")
-      .select("student_email")
+      .select("student_email, status")
       .eq("id", issueId)
       .single();
 
+    const assignedTechnician = normalizeTechnicianAssignment(technicianName);
+    const shouldAutoStart =
+      assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
+      currentIssue?.status === ISSUE_STATUSES.PENDING;
+    const shouldResetToPending =
+      assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED &&
+      currentIssue?.status === ISSUE_STATUSES.IN_PROGRESS;
+
+    const updatePayload = {
+      technician: assignedTechnician,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (shouldAutoStart) {
+      updatePayload.status = ISSUE_STATUSES.IN_PROGRESS;
+    }
+
+    if (shouldResetToPending) {
+      updatePayload.status = ISSUE_STATUSES.PENDING;
+    }
+
     const { data, error } = await supabase
       .from("issues")
-      .update({ technician: technicianName, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", issueId)
       .select();
 
@@ -619,12 +935,23 @@ export async function assignTechnician(issueId, technicianName) {
       await createNotificationForEmail(currentIssue.student_email, {
         issueId,
         title: "Technician assigned",
-        message: `Issue #${issueId} was assigned to ${technicianName}.`,
+        message:
+          assignedTechnician === APP_CONFIG.DEFAULT_NOT_ASSIGNED
+            ? `Issue #${issueId} is currently unassigned.`
+            : `Issue #${issueId} was assigned to ${assignedTechnician}.`,
       });
+
+      if (shouldAutoStart) {
+        await createNotificationForEmail(currentIssue.student_email, {
+          issueId,
+          title: "Work started",
+          message: `Issue #${issueId} moved to ${ISSUE_STATUSES.IN_PROGRESS}.`,
+        });
+      }
     }
 
-    if (technicianName && technicianName !== "Not Assigned") {
-      await createNotificationForEmail(technicianName, {
+    if (assignedTechnician && assignedTechnician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
+      await createNotificationForEmail(assignedTechnician, {
         issueId,
         title: "New assigned issue",
         message: `You were assigned to issue #${issueId}.`,
@@ -640,15 +967,39 @@ export async function assignTechnician(issueId, technicianName) {
 
 export async function confirmResolution(issueId, confirmed, note = "") {
   try {
-    const nextStatus = confirmed ? "Closed" : "Pending";
+    const { data: currentIssue, error: currentIssueError } = await supabase
+      .from("issues")
+      .select("technician")
+      .eq("id", issueId)
+      .single();
+
+    if (currentIssueError) {
+      console.error("Error fetching issue for confirmation:", currentIssueError);
+      return null;
+    }
+
+    const isAssigned =
+      currentIssue?.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED;
+    const nextStatus = confirmed
+      ? ISSUE_STATUSES.CLOSED
+      : isAssigned
+        ? ISSUE_STATUSES.IN_PROGRESS
+        : ISSUE_STATUSES.PENDING;
+
+    const updatePayload = {
+      status: nextStatus,
+      student_feedback: note || null,
+      closed_at: confirmed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (!confirmed) {
+      updatePayload.resolved_at = null;
+    }
+
     const { data, error } = await supabase
       .from("issues")
-      .update({
-        status: nextStatus,
-        student_feedback: note || null,
-        closed_at: confirmed ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", issueId)
       .select();
 
@@ -657,13 +1008,25 @@ export async function confirmResolution(issueId, confirmed, note = "") {
       return null;
     }
 
-    await createNotificationForRole("admin", {
+    const feedbackSuffix = note ? ` Note: ${note}` : "";
+
+    await createNotificationForRole(DB_ROLES.ADMIN, {
       issueId,
-      title: "Student response received",
+      title: "Citizen response received",
       message: confirmed
-        ? `Issue #${issueId} was confirmed and closed by the student.`
-        : `Issue #${issueId} was reopened by the student.`,
+        ? `Issue #${issueId} was confirmed and closed by the citizen.${feedbackSuffix}`
+        : `Issue #${issueId} was reopened by the citizen.${feedbackSuffix}`,
     });
+
+    if (isAssigned) {
+      await createNotificationForEmail(currentIssue.technician, {
+        issueId,
+        title: confirmed ? "Issue closed by citizen" : "Issue reopened by citizen",
+        message: confirmed
+          ? `Issue #${issueId} was confirmed and closed.${feedbackSuffix}`
+          : `Issue #${issueId} was reopened and moved to ${nextStatus}.${feedbackSuffix}`,
+      });
+    }
 
     return data;
   } catch (err) {
@@ -672,27 +1035,53 @@ export async function confirmResolution(issueId, confirmed, note = "") {
   }
 }
 
-export async function autoCloseResolvedIssues(days = 7) {
+export async function autoCloseResolvedIssues(days = APP_CONFIG.AUTO_CLOSE_DAYS) {
   try {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from("issues")
       .update({
-        status: "Closed",
-        student_feedback: "Auto-closed after no student response.",
+        status: ISSUE_STATUSES.CLOSED,
+        student_feedback: "Auto-closed after no citizen response.",
         closed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
-      .eq("status", "Resolved")
+      .eq("status", ISSUE_STATUSES.RESOLVED)
       .lte("resolved_at", cutoff)
       .is("closed_at", null)
-      .select("id");
+      .select("id, student_email, technician");
 
     if (error) {
       console.error("Error auto-closing resolved issues:", error);
       return [];
     }
 
-    return data || [];
+    const closedIssues = data || [];
+    for (const issue of closedIssues) {
+      if (issue.student_email) {
+        await createNotificationForEmail(issue.student_email, {
+          issueId: issue.id,
+          title: "Issue auto-closed",
+          message: `Issue #${issue.id} was auto-closed after ${days} days without confirmation.`,
+        });
+      }
+
+      if (issue.technician && issue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
+        await createNotificationForEmail(issue.technician, {
+          issueId: issue.id,
+          title: "Issue auto-closed",
+          message: `Issue #${issue.id} was auto-closed after ${days} days.`,
+        });
+      }
+
+      await createNotificationForRole(DB_ROLES.ADMIN, {
+        issueId: issue.id,
+        title: "Issue auto-closed",
+        message: `Issue #${issue.id} was auto-closed after ${days} days without citizen confirmation.`,
+      });
+    }
+
+    return closedIssues;
   } catch (err) {
     console.error("Error:", err);
     return [];
@@ -821,10 +1210,15 @@ export async function markNotificationRead(notificationId) {
 }
 
 async function createNotificationForEmail(recipientEmail, notification) {
+  const normalizedRecipient = (recipientEmail || "").trim().toLowerCase();
+  if (!normalizedRecipient) {
+    return;
+  }
+
   try {
     const { error } = await supabase.from("notifications").insert([
       {
-        recipient_email: recipientEmail,
+        recipient_email: normalizedRecipient,
         issue_id: notification.issueId || null,
         title: notification.title,
         message: notification.message,
@@ -865,7 +1259,7 @@ export { supabase };
 // ============ DIAGNOSTIC FUNCTIONS ============
 
 export async function checkSetup() {
-  console.log("\n=== SMART CAMPUS SETUP DIAGNOSTIC ===\n");
+  console.log("\n=== GOVERNMENT ISSUE TRACKING SETUP DIAGNOSTIC ===\n");
 
   console.log("1) Supabase connection");
   console.log("   URL:", SUPABASE_URL);
@@ -956,4 +1350,207 @@ export async function adminDeleteUserRole(email) {
   const { error } = await supabase.from('user_roles').delete().eq('email', normalizedEmail);
   if (error) throw error;
   return true;
+}
+
+// ============ MORE INFO NEEDED FUNCTIONS ============
+
+export async function requestMoreInfo(issueId, infoRequest, technicianEmail = null) {
+  try {
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email")
+      .eq("id", issueId)
+      .single();
+
+    const updatePayload = {
+      status: ISSUE_STATUSES.MORE_INFO_NEEDED,
+      more_info_request: infoRequest,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    // Backward compatibility: some schemas do not have more_info_request.
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase
+        .from("issues")
+        .update({
+          status: ISSUE_STATUSES.MORE_INFO_NEEDED,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", issueId)
+        .select());
+    }
+
+    if (error) {
+      console.error("Error requesting more info:", error);
+      throw new Error(error.message || `Unable to request more information for issue #${issueId}.`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(`Unable to request more information for issue #${issueId}.`);
+    }
+
+    if (currentIssue?.student_email) {
+      await createNotificationForEmail(currentIssue.student_email, {
+        issueId,
+        title: "More information needed",
+        message: `Issue #${issueId}: ${infoRequest}`,
+      });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    throw new Error(err.message || `Unable to request more information for issue #${issueId}.`);
+  }
+}
+
+export async function submitAdditionalInfo(issueId, additionalInfo) {
+  try {
+    const trimmedInfo = (additionalInfo || "").trim();
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email, technician")
+      .eq("id", issueId)
+      .single();
+
+    const updatePayload = {
+      status: ISSUE_STATUSES.IN_PROGRESS,
+      additional_info: additionalInfo,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    // Backward compatibility: some schemas do not have additional_info.
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase
+        .from("issues")
+        .update({
+          status: ISSUE_STATUSES.IN_PROGRESS,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", issueId)
+        .select());
+    }
+
+    if (error) {
+      console.error("Error submitting additional info:", error);
+      throw new Error(error.message || `Unable to submit additional information for issue #${issueId}.`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(`Unable to submit additional information for issue #${issueId}.`);
+    }
+
+    if (currentIssue?.technician && currentIssue.technician !== APP_CONFIG.DEFAULT_NOT_ASSIGNED) {
+      await createNotificationForEmail(currentIssue.technician, {
+        issueId,
+        title: "Citizen provided additional information",
+        message: trimmedInfo
+          ? `Issue #${issueId}: ${trimmedInfo}`
+          : `Issue #${issueId}: Citizen submitted the requested information.`,
+      });
+    }
+
+    await createNotificationForRole(DB_ROLES.ADMIN, {
+      issueId,
+      title: "Additional information submitted",
+      message: trimmedInfo
+        ? `Issue #${issueId}: ${trimmedInfo}`
+        : `Issue #${issueId} received additional information from the citizen.`,
+    });
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    throw new Error(err.message || `Unable to submit additional information for issue #${issueId}.`);
+  }
+}
+
+// ============ TECHNICIAN SUBMISSION FUNCTIONS ============
+
+export async function submitTechnicianWork(issueId, workDescription, submissionImageUrl = null) {
+  try {
+    const noteText = (workDescription || "").trim();
+    const baseUpdatePayload = {
+      status: ISSUE_STATUSES.RESOLVED,
+      resolved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Prefer current schema column name and keep a compatibility fallback.
+    const updatePayload = {
+      ...baseUpdatePayload,
+      completion_note: workDescription,
+    };
+
+    if (submissionImageUrl) {
+      updatePayload.submission_image_url = submissionImageUrl;
+    }
+
+    const { data: currentIssue } = await supabase
+      .from("issues")
+      .select("student_email")
+      .eq("id", issueId)
+      .single();
+
+    let { data, error } = await supabase
+      .from("issues")
+      .update(updatePayload)
+      .eq("id", issueId)
+      .select();
+
+    if (error && error.code === "42703") {
+      const legacyPayload = {
+        ...baseUpdatePayload,
+        resolution_notes: workDescription,
+      };
+
+      if (submissionImageUrl) {
+        legacyPayload.submission_image_url = submissionImageUrl;
+      }
+
+      ({ data, error } = await supabase
+        .from("issues")
+        .update(legacyPayload)
+        .eq("id", issueId)
+        .select());
+    }
+
+    if (error) {
+      console.error("Error submitting technician work:", error);
+      return null;
+    }
+
+    if (currentIssue?.student_email) {
+      await createNotificationForEmail(currentIssue.student_email, {
+        issueId,
+        title: "Your issue has been resolved",
+        message: noteText
+          ? `Issue #${issueId} has been resolved. Note from technician: ${noteText}`
+          : `Issue #${issueId} has been resolved. Please confirm if the problem is fixed.`,
+      });
+    }
+
+    await createNotificationForRole(DB_ROLES.ADMIN, {
+      issueId,
+      title: "Issue resolved by technician",
+      message: `Issue #${issueId} has been marked resolved and is awaiting citizen confirmation.`,
+    });
+
+    return data;
+  } catch (err) {
+    console.error("Error:", err);
+    return null;
+  }
 }
